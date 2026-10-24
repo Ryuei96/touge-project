@@ -95,7 +95,28 @@ src/
 
 ## 動作確認済みの機能（v0.3）
 
-__VERIFICATION__
+検証環境: Node 22 / Chromium（Playwright 同梱、ヘッドレス + SwiftShader）。ヘッドレスで再現確認した内容のみ「確認済み」としている。
+実機 Chrome での手動操作感（フレームレート・操作の手応え）は未確認。
+
+| Task | 内容 | 状態 |
+| --- | --- | --- |
+| 1 | `npm run dev` で Chrome 上にゲーム画面表示 | 確認済み（HUD・路面・地形・樹木・空が描画される） |
+| 1 | `npm run build` / `tsc -b` / `oxlint` / `vitest`（28 テスト） | 確認済み |
+| 2 | W で前進（-Z 方向へ加速、約 5.4 m/s²） | 確認済み |
+| 2 | S でブレーキ → 停止後に後退（ギア R 表示） | 確認済み |
+| 2 | A で左旋回 / D で右旋回（直線区間でヨー変化を計測） | 確認済み |
+| 2 | Space サイドブレーキ（後輪ロック + グリップ低下） | 実装済み・挙動はヘッドレスでは未計測 |
+| 2 | R で復帰（スタート / 最終チェックポイントへ戻り速度ゼロ） | 確認済み |
+| 2 | C でカメラ切替（追従 → ボンネット → 俯瞰） | 確認済み |
+| 2 | Rapier `DynamicRayCastVehicleController` を用いた FR 車両（後輪駆動・前輪操舵・速度感応ステア・ダウンフォース） | 確認済み |
+| 3 | XYZ 制御点 + 幅員 + 勾配 → centripetal Catmull-Rom 補間 → 等間隔サンプル | 確認済み（単体テスト） |
+| 3 | 路面メッシュ・ガードレール・地形メッシュ生成、trimesh 衝突 | 確認済み |
+| 3 | 架空コース「鳴沢峠」（約 1.5 km、ヘアピン 2・S 字）をオートパイロットで完走 | 確認済み（CP 5/5 → ゴール、復帰 0 回、89.2 s、最高 102 km/h） |
+| 4 | 共通コースデータ `CourseDefinition` と `CourseManager`（procedural / geospatial / bim） | 確認済み（bim は NotImplemented を返す） |
+| 4 | スタート・ゴール・チェックポイント・タイム計測・ゴール表示 | 確認済み |
+| 5 | GeoJSON 線形 + 配列 DEM → `GeoDataImporter` → `CourseDefinition(geospatial)` → 同じパイプラインで走行 | 確認済み（合成データの `sample-geo` をオートパイロットで完走、52.0 s） |
+| 5 | `CoordinateTransformer`（緯度経度 / 投影座標 ⇔ ゲーム座標、往復変換） | 確認済み（単体テスト） |
+
 
 ## 未実装・今後の機能
 
@@ -131,7 +152,7 @@ __VERIFICATION__
 ## 検証方法
 
 ```bash
-npm run check                      # tsc + oxlint + vitest（27 テスト）
+npm run check                      # tsc + oxlint + vitest（28 テスト）
 npm run dev                        # 手動: Chrome で操作確認
 ```
 
