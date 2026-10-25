@@ -136,7 +136,10 @@ export interface CourseDefinition {
   elevation: ElevationInfo
   /** サンプリング間隔 [m] */
   sampleStep?: number
+  /** 閉路（周回コース）か */
   closed?: boolean
+  /** 周回数（closed のとき）。省略時 1 */
+  laps?: number
   terrain?: TerrainOptions
   guardrails?: boolean
   checkpoints?: CheckpointSpec
@@ -149,7 +152,37 @@ export interface CourseDefinition {
   scenery?: { seed?: number; treeCount?: number }
   /** source = 'bim' のとき: 走行路を含む GLB モデル */
   model?: BimModelRef
+  /** 周辺環境レイヤー（点群・建物など）。ブラウザで非同期に読み込む */
+  layers?: CourseLayer[]
 }
+
+/** 点群レイヤー: PLY / LAS / XYZ を読み、ゲーム座標で描画する */
+export interface PointCloudLayerRef {
+  kind: 'point-cloud'
+  id: string
+  uri: string
+  /** 'enu' = (east, north, up) 列, 'game' = 既にゲーム座標, 'projected' = course.origin の投影座標（easting, northing, height） */
+  coordinates: 'enu' | 'game' | 'projected'
+  /** X/Y 入れ替え（平面直角座標系の X=北・Y=東 対策） */
+  swapXY?: boolean
+  maxPoints?: number
+  pointSize?: number
+  attribution: Attribution
+}
+
+/** CityGML 建物レイヤー（PLATEAU など）。course.origin が緯度経度なら同じ原点で変換する */
+export interface CityGmlLayerRef {
+  kind: 'citygml'
+  id: string
+  uri: string
+  collision?: boolean
+  maxBuildings?: number
+  maxDistance?: number
+  color?: string
+  attribution: Attribution
+}
+
+export type CourseLayer = PointCloudLayerRef | CityGmlLayerRef
 
 /** BIM/CIM モデル（GLB）の参照と補正 */
 export interface BimModelRef {

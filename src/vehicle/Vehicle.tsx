@@ -12,7 +12,8 @@ import { runtime } from '../app/runtime'
 import type { BuiltCourse } from '../course/types'
 import { keyboard, type DriveInput } from '../input/keyboard'
 import { useGarageStore } from '../app/garageStore'
-import { computeAutopilot } from './autopilot'
+import { audioEngine } from '../audio/AudioEngine'
+import { AutopilotDriver } from './autopilot'
 import { CarBody } from './CarBody'
 import { getCarPreset, resolveVehicleConfig } from './carCatalog'
 import { RaycastVehicle } from './RaycastVehicle'
@@ -33,6 +34,7 @@ export function Vehicle({ course }: { course: BuiltCourse }) {
   const tmpQuat = useMemo(() => new Quaternion(), [])
   const tmpVel = useMemo(() => new Vector3(), [])
   const lastInput = useRef<DriveInput>({ throttle: 0, brake: 0, steer: 0, handbrake: false })
+  const driver = useRef(new AutopilotDriver())
 
   const start = course.markers.start
 
@@ -79,10 +81,13 @@ export function Vehicle({ course }: { course: BuiltCourse }) {
 
     let input = keyboard.read()
     if (state.autopilot) {
-      const r = computeAutopilot(course.samples, runtime.position, runtime.forward, runtime.speedMs, runtime.progressIndex)
+      const r = driver.current.update(course.samples, runtime.position, runtime.forward, runtime.speedMs, runtime.progressIndex, w.timestep, { closed: course.definition.closed })
       input = state.finished ? { throttle: 0, brake: 1, steer: r.input.steer, handbrake: false } : r.input
     }
+    if (!state.setupDone) input = { throttle: 0, brake: 1, steer: 0, handbrake: true }
     lastInput.current = input
+    runtime.throttle = input.throttle
+    runtime.handbrake = input.handbrake
     vehicle.update(input, w.timestep)
 
     // 落下時の自動復帰
@@ -105,6 +110,11 @@ export function Vehicle({ course }: { course: BuiltCourse }) {
     runtime.velocity.copy(tmpVel)
     runtime.speedMs = tmpVel.dot(tmpForward)
     runtime.wheelsOnGround = vehicle.wheelsInContact()
+
+    // サウンド: 横滑り量とサイドブレーキからスキール強度を出す
+    const lateral = Math.abs(tmpVel.x * tmpForward.z - tmpVel.z * tmpForward.x)
+    const skid = Math.min(1, lateral / 6) + (runtime.handbrake && Math.abs(runtime.speedMs) > 3 ? 0.5 : 0)
+    audioEngine.update({ throttle: runtime.throttle, speedMs: Math.abs(runtime.speedMs), maxSpeedMs: cfg.maxSpeed, skid, wheelsOnGround: runtime.wheelsOnGround })
 
     // ホイール表示
     const ws = vehicle.wheelStates()

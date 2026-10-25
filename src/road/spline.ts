@@ -180,25 +180,30 @@ export function sampleIndexAtDistance(samples: RoadSample[], d: number): number 
   return Math.min(samples.length - 1, Math.max(0, i))
 }
 
-/** 位置 p に最も近いサンプルのインデックス（hint 周辺を優先探索） */
-export function nearestSampleIndex(samples: RoadSample[], p: Vec3, hint?: number, window = 40): number {
+/** 位置 p に最も近いサンプルのインデックス（hint 周辺を優先探索）。closed のときは端を跨いで探索する */
+export function nearestSampleIndex(samples: RoadSample[], p: Vec3, hint?: number, window = 40, closed = false): number {
+  const n = samples.length
   let best = -1
   let bestD = Infinity
-  const scan = (from: number, to: number) => {
-    for (let i = Math.max(0, from); i <= Math.min(samples.length - 1, to); i++) {
-      const s = samples[i].position
-      const dx = s.x - p.x
-      const dz = s.z - p.z
-      const dy = (s.y - p.y) * 0.5
-      const d = dx * dx + dz * dz + dy * dy
-      if (d < bestD) {
-        bestD = d
-        best = i
-      }
+  const check = (i: number) => {
+    const s = samples[i].position
+    const dx = s.x - p.x
+    const dz = s.z - p.z
+    const dy = (s.y - p.y) * 0.5
+    const d = dx * dx + dz * dz + dy * dy
+    if (d < bestD) {
+      bestD = d
+      best = i
     }
   }
-  if (hint !== undefined) scan(hint - window, hint + window)
-  if (best < 0 || bestD > 400) scan(0, samples.length - 1)
+  if (hint !== undefined) {
+    for (let k = -window; k <= window; k++) {
+      const i = hint + k
+      if (closed) check(((i % n) + n) % n)
+      else if (i >= 0 && i < n) check(i)
+    }
+  }
+  if (best < 0 || bestD > 400) for (let i = 0; i < n; i++) check(i)
   return best
 }
 

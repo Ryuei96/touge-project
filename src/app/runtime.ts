@@ -3,7 +3,7 @@
  * 車両 → カメラ / レース判定 / HUD の低頻度反映に使う。
  */
 import { Quaternion, Vector3 } from 'three'
-import type { Pose } from '../course/types'
+import type { BuiltCourse, Pose } from '../course/types'
 
 export interface VehicleRuntime {
   position: Vector3
@@ -19,6 +19,26 @@ export interface VehicleRuntime {
   resetRequested: boolean
   /** 最後に通過した中心線サンプルのインデックス（オートパイロットのヒント） */
   progressIndex: number
+  /** 周回コースでの現在周（0 始まり） */
+  lapIndex: number
+  /** 直近の入力（サウンド用） */
+  throttle: number
+  handbrake: boolean
+  /** ライバル車（いなければ null） */
+  rival: RivalRuntime | null
+  /** 現在のコース（HUD のミニマップ用） */
+  course: BuiltCourse | null
+}
+
+export interface RivalRuntime {
+  position: Vector3
+  forward: Vector3
+  speedMs: number
+  progressIndex: number
+  lapIndex: number
+  finished: boolean
+  /** レース距離 = 周回 × コース長 + 弧長 */
+  raceDistance: number
 }
 
 export const runtime: VehicleRuntime = {
@@ -31,4 +51,9 @@ export const runtime: VehicleRuntime = {
   respawn: null,
   resetRequested: false,
   progressIndex: 0,
+  lapIndex: 0,
+  throttle: 0,
+  handbrake: false,
+  rival: null,
+  course: null,
 }

@@ -63,3 +63,26 @@ button.mini:disabled { opacity: 0.4; cursor: default; }
 .placed-list { margin: 0; padding-left: 16px; max-height: 120px; overflow-y: auto; }
 .placed-list li { display: flex; gap: 6px; align-items: center; }
 input[type=color] { width: 28px; height: 22px; padding: 0; border: none; background: none; }
+
+.parts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; }
+.part-row { display: grid; grid-template-columns: 56px 1fr; align-items: center; gap: 6px; }
+.part-row select { width: 100%; }
+.stats-grid { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 2px 8px; font-variant-numeric: tabular-nums; }
+.stats-grid b { color: #f5c542; }
+.minimap { display: block; margin-top: 8px; margin-left: auto; background: rgba(0,0,0,0.25); border-radius: 8px; }
+.progress-bar { margin-top: 6px; height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; overflow: hidden; }
+.progress-fill { height: 100%; background: #3ddcff; transition: width 0.2s linear; }
+.rank-first { color: #f5c542; }
+.rank-second { color: #ff8a6a; }
+.dialogue { position: absolute; left: 50%; bottom: 90px; transform: translateX(-50%); max-width: min(720px, 90%); background: rgba(10,14,22,0.78); border: 1px solid rgba(255,255,255,0.18); border-radius: 12px; padding: 10px 18px; display: flex; gap: 12px; align-items: baseline; pointer-events: auto; cursor: pointer; font-size: 16px; }
+.dialogue .speaker { font-weight: 700; white-space: nowrap; }
+.setup-backdrop { position: absolute; inset: 0; background: rgba(5,8,14,0.72); display: flex; align-items: center; justify-content: center; pointer-events: auto; }
+.setup { position: relative; width: min(880px, 94%); max-height: 92%; overflow-y: auto; }
+.setup-columns { display: grid; grid-template-columns: 1fr 1.2fr; gap: 18px; margin-top: 8px; }
+.setup-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.setup-col .subpanel { margin-top: 0; border-top: none; padding-top: 0; }
+.course-list { display: flex; flex-direction: column; gap: 6px; }
+.setup-actions { margin-top: 14px; gap: 14px; }
+button.primary { font: inherit; font-size: 18px; font-weight: 700; background: #f5c542; color: #1a1300; border: none; border-radius: 10px; padding: 10px 28px; cursor: pointer; letter-spacing: 0.08em; }
+button.primary:disabled { opacity: 0.5; cursor: default; }
+@media (max-width: 720px) { .setup-columns { grid-template-columns: 1fr; } }

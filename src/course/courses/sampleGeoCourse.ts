@@ -66,6 +66,26 @@ function build(): CourseDefinition {
   def.terrain = { enabled: true, margin: 120, resolution: 120, seed: 3, amplitude: 10, blendDistance: 40 }
   def.checkpoints = { interval: 300 }
   def.scenery = { seed: 5, treeCount: 500 }
+  // 合成の周辺環境（scripts/make-sample-geo.mjs が生成）。PLATEAU CityGML と LAS/PLY 点群の読み込み経路の確認用
+  def.layers = [
+    {
+      kind: 'citygml',
+      id: 'buildings',
+      uri: 'samples/sample-buildings.gml',
+      collision: true,
+      color: '#d8d0c2',
+      attribution: { ...attribution, source: '合成 CityGML（PLATEAU 形式）' },
+    },
+    {
+      kind: 'point-cloud',
+      id: 'scan',
+      uri: 'samples/sample-scan.ply',
+      coordinates: 'enu',
+      maxPoints: 20000,
+      pointSize: 0.4,
+      attribution: { ...attribution, source: '合成点群（PLY）' },
+    },
+  ]
   return def
 }
 

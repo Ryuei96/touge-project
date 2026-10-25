@@ -6,7 +6,10 @@ import { FollowCamera } from '../camera/FollowCamera'
 import { courseManager } from '../course'
 import { CourseScene } from '../course/CourseScene'
 import type { BuiltCourse } from '../course/types'
+import { RivalVehicle } from '../vehicle/RivalVehicle'
 import { Vehicle } from '../vehicle/Vehicle'
+import { audioEngine } from '../audio/AudioEngine'
+import { keyboard } from '../input/keyboard'
 import { useGameStore } from './gameStore'
 import { useGarageStore } from './garageStore'
 import { RaceController } from './RaceController'
@@ -60,8 +63,42 @@ function ExposeScene() {
 export function Game() {
   const courseId = useGameStore((s) => s.courseId)
   const course = useCourse(courseId)
+  const rivalEnabled = useGameStore((s) => s.rivalEnabled)
+  const setupDone = useGameStore((s) => s.setupDone)
+  const muted = useGameStore((s) => s.muted)
+  const bgmStyle = useGameStore((s) => s.bgmStyle)
+
+  // サウンド: 最初の操作で開始。M でミュート切替
+  useEffect(() => {
+    const onFirst = () => {
+      audioEngine.start()
+      audioEngine.setStyle(useGameStore.getState().bgmStyle)
+      audioEngine.setMuted(useGameStore.getState().muted)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === 'KeyM' && !(e.target instanceof HTMLInputElement)) useGameStore.getState().patch({ muted: !useGameStore.getState().muted })
+    }
+    window.addEventListener('keydown', onFirst, { once: true })
+    window.addEventListener('pointerdown', onFirst, { once: true })
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onFirst)
+      window.removeEventListener('pointerdown', onFirst)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [])
+  useEffect(() => {
+    audioEngine.setMuted(muted)
+  }, [muted])
+  useEffect(() => {
+    audioEngine.setStyle(bgmStyle)
+  }, [bgmStyle])
+  useEffect(() => {
+    void keyboard
+  }, [setupDone])
 
   useEffect(() => {
+    runtime.course = course
     window.__touge = {
       store: useGameStore,
       garage: useGarageStore,
@@ -89,6 +126,7 @@ export function Game() {
           <Physics key={course.definition.id} timeStep={1 / 60} gravity={[0, -9.81, 0]} interpolate>
             <CourseScene course={course} />
             <Vehicle course={course} />
+            {rivalEnabled && <RivalVehicle course={course} />}
             <RaceController course={course} />
           </Physics>
         </Suspense>

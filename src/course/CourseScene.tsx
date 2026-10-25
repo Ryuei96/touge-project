@@ -10,6 +10,7 @@ import { createRoadTexture } from './textures'
 import { useGameStore } from '../app/gameStore'
 import { useGarageStore } from '../app/garageStore'
 import { BimModelVisual, GlbAsset } from '../assets/GlbAsset'
+import { EnvironmentLayers } from '../scenery/EnvironmentLayers'
 
 function toGeometry(mesh: MeshData): BufferGeometry {
   const g = new BufferGeometry()
@@ -220,6 +221,7 @@ export function CourseScene({ course }: { course: BuiltCourse }) {
       <Markers course={course} />
       <Assets assets={def.assets} />
       <PlacedAssets courseId={def.id} />
+      <EnvironmentLayers course={course} />
       <fog attach="fog" args={[fogColor, 150, 900]} />
     </group>
   )
