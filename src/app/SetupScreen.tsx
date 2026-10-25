@@ -15,6 +15,8 @@ type Tab = 'race' | 'garage' | 'characters'
 export function SetupScreen() {
   const s = useGameStore()
   const rivals = useGarageStore((st) => st.rivals)
+  const playerName = useGarageStore((st) => st.playerName)
+  const setPlayerName = useGarageStore((st) => st.setPlayerName)
   const courses = courseManager.list()
   const [tab, setTab] = useState<Tab>('race')
   const enabledRivals = rivals.filter((r) => r.enabled).length
@@ -60,6 +62,12 @@ export function SetupScreen() {
               <div className="small">{s.status === 'loading' ? '読み込み中…' : s.status === 'error' ? `エラー: ${s.errorMessage}` : s.courseName}</div>
             </div>
             <div className="setup-col">
+              <div className="subtitle">プレイヤー登録</div>
+              <label className="row small">
+                名前
+                <input id="player-name" className="name-entry" type="text" maxLength={10} value={playerName} onChange={(e) => setPlayerName(e.target.value.toUpperCase())} placeholder="PLAYER" />
+                <span className="small">（ランキングに記録・最大 10 文字）</span>
+              </label>
               <div className="subtitle">時間帯</div>
               <div className="row">
                 {(

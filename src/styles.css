@@ -112,3 +112,57 @@ button.small-primary { font-size: 14px; padding: 6px 16px; }
 @media (max-width: 720px) { .character-list { grid-template-columns: 1fr; } }
 
 .pad-badge { margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: rgba(61,220,255,0.18); border: 1px solid rgba(61,220,255,0.5); color: #bdf0ff; font-size: 11px; }
+
+/* ---- アーケード要素 ---- */
+.gauge { position: absolute; bottom: 10px; right: 10px; width: 230px; pointer-events: none; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.5)); }
+.speedo { width: 100%; height: auto; display: block; }
+.countdown { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.countdown-number {
+  font-size: 160px; font-weight: 900; letter-spacing: 0.05em; color: #fff;
+  text-shadow: 0 0 24px rgba(245,197,66,0.9), 0 6px 0 rgba(0,0,0,0.5);
+  animation: cd-pop 0.9s ease-out forwards;
+}
+.countdown-number.go { color: #f5c542; font-size: 190px; animation: cd-go 0.9s ease-out forwards; }
+@keyframes cd-pop { 0% { transform: scale(1.8); opacity: 0; } 20% { transform: scale(1); opacity: 1; } 80% { opacity: 1; } 100% { transform: scale(0.8); opacity: 0; } }
+@keyframes cd-go { 0% { transform: scale(0.4); opacity: 0; } 25% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }
+.corner-guide {
+  position: absolute; top: 18%; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px; padding: 8px 18px;
+  background: rgba(10,14,22,0.6); border: 1px solid rgba(255,255,255,0.18); border-radius: 12px;
+  pointer-events: none; transition: border-color 0.2s, background 0.2s;
+}
+.corner-guide .corner-arrow { font-size: 34px; line-height: 1; color: #3ddcff; }
+.corner-guide.sev-2 .corner-arrow { color: #ffb84d; }
+.corner-guide.sev-3 .corner-arrow { color: #ff5a4a; }
+.corner-guide.near { background: rgba(60,20,20,0.7); border-color: rgba(255,90,74,0.7); }
+.corner-guide.near .corner-arrow { animation: blink 0.4s steps(2) infinite; }
+@keyframes blink { to { opacity: 0.25; } }
+.corner-text { display: flex; flex-direction: column; line-height: 1.2; }
+.corner-text b { letter-spacing: 0.1em; }
+.corner-text span { font-size: 13px; opacity: 0.85; font-variant-numeric: tabular-nums; }
+.sector-popup {
+  position: absolute; top: 30%; left: 50%; transform: translateX(-50%);
+  text-align: center; padding: 10px 28px; border-radius: 12px; pointer-events: none;
+  background: rgba(10,14,22,0.75); border: 1px solid rgba(255,255,255,0.18);
+  animation: sector-in 2.6s ease-out forwards;
+}
+.sector-popup.good { border-color: rgba(61,220,255,0.7); }
+.sector-popup.bad { border-color: rgba(255,90,74,0.7); }
+.sector-title { font-size: 12px; letter-spacing: 0.14em; opacity: 0.8; }
+.sector-time { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sector-delta { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sector-popup.good .sector-delta { color: #7fe8ff; }
+.sector-popup.bad .sector-delta { color: #ff8a7a; }
+@keyframes sector-in { 0% { transform: translate(-50%, -16px); opacity: 0; } 10% { transform: translate(-50%, 0); opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; } }
+.name-entry { font: inherit; font-size: 16px; letter-spacing: 0.18em; text-transform: uppercase; width: 10em; background: #0f1420; color: #f5c542; border: 1px solid #3a4454; border-radius: 6px; padding: 4px 8px; }
+.results .results-head { text-align: center; margin: 6px 0 12px; }
+.results .results-time { font-size: 44px; font-weight: 800; font-variant-numeric: tabular-nums; color: #f5c542; }
+.results .results-rank { font-size: 18px; font-weight: 700; }
+.results-columns { display: grid; grid-template-columns: 1fr 1.3fr; gap: 18px; }
+table.records { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.records td { padding: 3px 6px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+table.records td.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.records td.good { color: #7fe8ff; }
+table.records td.bad { color: #ff8a7a; }
+table.records tr.me td { background: rgba(245,197,66,0.14); }
+@media (max-width: 720px) { .results-columns { grid-template-columns: 1fr; } .gauge { width: 170px; } }

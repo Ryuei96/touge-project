@@ -36,7 +36,7 @@ export const BGM_TRACKS: Record<'goldrunner' | 'hardcore', { uri: string; title:
   hardcore: { uri: 'audio/bgm_hardcore_power.ogg', title: 'Hardcore Power (We Believe In Goa Remix)', artist: 'Dafunk' },
 }
 export const isTrackStyle = (s: BgmStyle): s is 'goldrunner' | 'hardcore' => s === 'goldrunner' || s === 'hardcore'
-export type SfxName = 'collision' | 'bump' | 'checkpoint' | 'finish' | 'shift' | 'start'
+export type SfxName = 'collision' | 'bump' | 'checkpoint' | 'finish' | 'shift' | 'start' | 'beep' | 'go' | 'sector-good' | 'sector-bad'
 
 const NOTE = (n: number) => 440 * Math.pow(2, (n - 69) / 12)
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
@@ -810,6 +810,25 @@ export class AudioEngine {
         this.bell(880, t, 0.5, 0.2)
         break
       }
+      case 'beep': {
+        this.tone(660, t, 0.18, 'square', 0.25)
+        break
+      }
+      case 'go': {
+        this.tone(990, t, 0.5, 'square', 0.3)
+        this.tone(1320, t + 0.02, 0.5, 'sawtooth', 0.12)
+        break
+      }
+      case 'sector-good': {
+        this.bell(1318.5, t, 0.5, 0.22)
+        this.bell(1760, t + 0.08, 0.6, 0.2)
+        break
+      }
+      case 'sector-bad': {
+        this.tone(440, t, 0.25, 'triangle', 0.25)
+        this.tone(392, t + 0.12, 0.3, 'triangle', 0.22)
+        break
+      }
       case 'shift': {
         const n = ctx.createBufferSource()
         n.buffer = this.noiseWhite
@@ -825,6 +844,21 @@ export class AudioEngine {
         break
       }
     }
+  }
+
+  private tone(freq: number, t: number, dur: number, type: OscillatorType, gain: number): void {
+    const ctx = this.ctx!
+    const o = ctx.createOscillator()
+    o.type = type
+    o.frequency.value = freq
+    const g = ctx.createGain()
+    g.gain.setValueAtTime(0, t)
+    g.gain.linearRampToValueAtTime(gain, t + 0.01)
+    g.gain.setValueAtTime(gain, t + dur * 0.7)
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur)
+    o.connect(g).connect(this.sfxBus!)
+    o.start(t)
+    o.stop(t + dur + 0.05)
   }
 
   private bell(freq: number, t: number, dur: number, gain: number): void {

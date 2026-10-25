@@ -8,6 +8,7 @@ import { audioEngine } from '../audio/AudioEngine'
 import type { BuiltCourse } from '../course/types'
 import { banterLine, getCharacter, type BanterEvent, type Character } from '../race/characters'
 import { getCarPreset } from '../vehicle/carCatalog'
+import { loadRecords, saveRecord, splitDelta } from '../race/records'
 import { nearestSampleIndex, sampleIndexAtDistance } from '../road/spline'
 import { useGameStore, type DialogueLine } from './gameStore'
 import { useGarageStore } from './garageStore'
@@ -19,6 +20,44 @@ interface RivalMemory {
   lastPass: number
 }
 
+const CORNER_LOOK = 220
+const CORNER_MIN = 1 / 90
+
+/** 前方 CORNER_LOOK m 以内で最初に曲率が閾値を超える区間を探し、方向・距離・きつさを返す */
+function findNextCorner(course: BuiltCourse, idx: number, closed: boolean): { dir: 'left' | 'right'; distance: number; severity: 1 | 2 | 3 } | null {
+  const samples = course.samples
+  const n = samples.length
+  const d0 = samples[idx].distance
+  let start = -1
+  let peak = 0
+  let sign = 0
+  for (let k = 1; k < n; k++) {
+    let j = idx + k
+    if (j >= n) {
+      if (!closed) break
+      j -= n
+    }
+    const dist = (samples[j].distance - d0 + course.length) % course.length
+    if (dist > CORNER_LOOK) break
+    const c = samples[j].curvature
+    if (start < 0) {
+      if (Math.abs(c) > CORNER_MIN) {
+        start = j
+        sign = Math.sign(c)
+        peak = Math.abs(c)
+      }
+    } else {
+      if (Math.abs(c) <= CORNER_MIN * 0.7 || Math.sign(c) !== sign) break
+      peak = Math.max(peak, Math.abs(c))
+    }
+  }
+  if (start < 0) return null
+  const distance = (samples[start].distance - d0 + course.length) % course.length
+  const severity: 1 | 2 | 3 = peak > 1 / 22 ? 3 : peak > 1 / 45 ? 2 : 1
+  // curvature の符号: 左回り（Y 軸正回転）が正。進行方向に対する左右
+  return { dir: sign > 0 ? 'left' : 'right', distance, severity }
+}
+
 export function RaceController({ course }: { course: BuiltCourse }) {
   const acc = useRef(0)
   const fired = useRef(new Set<string>())
@@ -26,6 +65,8 @@ export function RaceController({ course }: { course: BuiltCourse }) {
   const hairpinCooldown = useRef(0)
   const lastTalk = useRef(0)
   const memory = useRef(new Map<string, RivalMemory>())
+  const splitKey = useRef(0)
+  const cornerTimer = useRef(0)
   const total = course.markers.checkpoints.length
   const closed = course.definition.closed ?? false
   const lapTotal = closed ? (course.definition.laps ?? 1) : 1
@@ -75,6 +116,20 @@ export function RaceController({ course }: { course: BuiltCourse }) {
     return text ? { speaker: nav.id, text } : null
   }
 
+  /** 区間通過: 累積タイムを記録し、ベストとの差を表示用に流す */
+  const sectorPass = (time: number, prev: number[]) => {
+    const splits = [...prev, time]
+    let delta: number | null = null
+    try {
+      delta = splitDelta(loadRecords(localStorage, course.definition.id), splits.length - 1, time)
+    } catch {
+      delta = null
+    }
+    audioEngine.playSfx(delta !== null && delta > 0 ? 'sector-bad' : 'sector-good')
+    splitKey.current++
+    return { splits, lastSplit: { index: splits.length - 1, time, delta, key: splitKey.current } }
+  }
+
   const once = (key: string): boolean => {
     if (fired.current.has(key)) return false
     fired.current.add(key)
@@ -84,6 +139,7 @@ export function RaceController({ course }: { course: BuiltCourse }) {
   useFrame((_, dt) => {
     const s = useGameStore.getState()
     if (!s.physicsReady || !s.setupDone) return
+    if (s.countdown !== null && s.countdown > 0) return
     const p = runtime.position
     const n = course.samples.length
     const prevIdx = runtime.progressIndex
@@ -127,14 +183,22 @@ export function RaceController({ course }: { course: BuiltCourse }) {
         if (isGoal) {
           if (closed && runtime.lapIndex + 1 < lapTotal) {
             runtime.lapIndex++
-            audioEngine.playSfx('checkpoint')
-            patch = { checkpointIndex: 0, lap: runtime.lapIndex + 1 }
+            patch = { checkpointIndex: 0, lap: runtime.lapIndex + 1, ...sectorPass(acc.current, s.splits) }
             runtime.respawn = course.markers.start
           } else {
             const mine = runtime.lapIndex * course.length + course.samples[idx].distance
             const aheadCount = rivals.filter((r) => r.finished || r.raceDistance > mine).length
             const rank = 1 + aheadCount
-            patch = { finished: true, finishTime: acc.current, checkpointIndex: s.checkpointIndex + 1, rank }
+            const splits = [...s.splits, acc.current]
+            const g2 = useGarageStore.getState()
+            let bestRank: number | null = null
+            try {
+              const saved = saveRecord(localStorage, course.definition.id, { name: g2.playerName || 'PLAYER', carId: g2.carId, time: acc.current, splits, date: new Date().toISOString() })
+              bestRank = saved.rank <= saved.records.entries.length ? saved.rank : null
+            } catch {
+              bestRank = null
+            }
+            patch = { finished: true, finishTime: acc.current, checkpointIndex: s.checkpointIndex + 1, rank, splits, result: { rank, time: acc.current, splits, bestRank } }
             audioEngine.playSfx('finish')
             const won = rank === 1
             const lines: DialogueLine[] = []
@@ -146,8 +210,7 @@ export function RaceController({ course }: { course: BuiltCourse }) {
           const si = sampleIndexAtDistance(course.samples, next.distance ?? 0)
           const sample = course.samples[si]
           runtime.respawn = { position: { x: sample.position.x, y: sample.position.y + 0.6, z: sample.position.z }, heading: sample.heading }
-          patch = { checkpointIndex: s.checkpointIndex + 1 }
-          audioEngine.playSfx('checkpoint')
+          patch = { checkpointIndex: s.checkpointIndex + 1, ...sectorPass(acc.current, s.splits) }
           if (s.checkpointIndex % 2 === 0) {
             const nl = navLine('checkpoint', '', s.checkpointIndex)
             if (nl) speak([nl])
@@ -211,6 +274,17 @@ export function RaceController({ course }: { course: BuiltCourse }) {
       }
     }
     void nav
+
+    // 進行ガイド: 次のコーナーの方向・距離・きつさ
+    cornerTimer.current -= dt
+    if (cornerTimer.current <= 0 && s.setupDone) {
+      cornerTimer.current = 0.2
+      const guide = findNextCorner(course, idx, closed)
+      const cur = s.nextCorner
+      if ((guide === null) !== (cur === null) || (guide && cur && (guide.dir !== cur.dir || guide.severity !== cur.severity || Math.abs(guide.distance - cur.distance) >= 5))) {
+        patch = { ...(patch ?? {}), nextCorner: guide }
+      }
+    }
 
     const every = Math.floor(acc.current * 10)
     const prevEvery = Math.floor((acc.current - dt) * 10)

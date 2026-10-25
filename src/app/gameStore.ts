@@ -47,6 +47,16 @@ export interface GameState {
   intro: boolean
   outroShown: boolean
   timeOfDay: TimeOfDay
+  /** カウントダウン（3,2,1 → 0 = GO 表示中、null = 無し）。カウントダウン中は車を止める */
+  countdown: number | null
+  /** 区間通過タイム（累積）[s] */
+  splits: number[]
+  /** 直近の区間通過表示 */
+  lastSplit: { index: number; time: number; delta: number | null; key: number } | null
+  /** 進行ガイド: 次のコーナー */
+  nextCorner: { dir: 'left' | 'right'; distance: number; severity: 1 | 2 | 3 } | null
+  /** 結果画面 */
+  result: { rank: number; time: number; splits: number[]; bestRank: number | null } | null
   /** 掛け合い */
   dialogue: { lines: DialogueLine[]; index: number; key: number } | null
   /** サウンド */
@@ -98,6 +108,11 @@ export const useGameStore = create<GameState>((set) => ({
   rivalFinished: false,
   intro: false,
   outroShown: false,
+  countdown: null,
+  splits: [],
+  lastSplit: null,
+  nextCorner: null,
+  result: null,
   timeOfDay: (initialQuery?.get('time') as TimeOfDay | null) ?? 'day',
   dialogue: null,
   muted: initialQuery?.get('mute') === '1',
@@ -105,12 +120,12 @@ export const useGameStore = create<GameState>((set) => ({
   postEffects: initialQuery?.get('fx') !== '0',
   gamepadConnected: false,
 
-  setCourse: (id) => set({ courseId: id, status: 'loading', elapsed: 0, started: false, finished: false, finishTime: null, checkpointIndex: 0, progress: 0, resets: 0, lap: 1, rank: 1, rivalFinished: false, dialogue: null, outroShown: false }),
+  setCourse: (id) => set({ courseId: id, status: 'loading', elapsed: 0, started: false, finished: false, finishTime: null, checkpointIndex: 0, progress: 0, resets: 0, lap: 1, rank: 1, rivalFinished: false, dialogue: null, outroShown: false, countdown: null, splits: [], lastSplit: null, result: null }),
   setStatus: (status, message) => set({ status, errorMessage: message }),
   cycleCamera: () => set((s) => ({ cameraMode: CAMERA_MODES[(CAMERA_MODES.indexOf(s.cameraMode) + 1) % CAMERA_MODES.length] })),
   setAutopilot: (on) => set({ autopilot: on }),
   patch: (partial) => set(partial),
-  resetRace: () => set({ elapsed: 0, started: false, finished: false, finishTime: null, checkpointIndex: 0, progress: 0, lap: 1, rank: 1, rivalFinished: false, dialogue: null, outroShown: false }),
+  resetRace: () => set({ elapsed: 0, started: false, finished: false, finishTime: null, checkpointIndex: 0, progress: 0, lap: 1, rank: 1, rivalFinished: false, dialogue: null, outroShown: false, countdown: null, splits: [], lastSplit: null, result: null }),
   startRun: () => set({ setupDone: true }),
   showDialogue: (lines) => set((s) => ({ dialogue: { lines, index: 0, key: (s.dialogue?.key ?? 0) + 1 } })),
   advanceDialogue: () =>

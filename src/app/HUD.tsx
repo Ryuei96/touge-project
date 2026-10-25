@@ -7,6 +7,9 @@ import { Minimap } from './Minimap'
 import { DialogueOverlay } from './DialogueOverlay'
 import type { BuiltCourse } from '../course/types'
 import { runtime } from './runtime'
+import { Countdown } from './Countdown'
+import { Speedometer } from './Speedometer'
+import { formatDelta } from '../race/records'
 
 function formatTime(t: number): string {
   const m = Math.floor(t / 60)
@@ -87,15 +90,27 @@ export function HUD() {
 
       <DialogueOverlay />
 
-      <div className="hud-bottom-right panel">
-        <div className="speed">
-          {s.speedKmh.toFixed(0)}
-          <span className="unit"> km/h</span>
-        </div>
-        <div className="small">
-          {s.gear} ・ 接地 {s.wheelsOnGround}/4
-        </div>
+      <div className="hud-bottom-right gauge">
+        <Speedometer />
       </div>
+
+      <Countdown />
+      {s.nextCorner && s.setupDone && !s.finished && (
+        <div className={`corner-guide sev-${s.nextCorner.severity} ${s.nextCorner.distance < 40 ? 'near' : ''}`} aria-label="次のコーナー">
+          <span className="corner-arrow">{s.nextCorner.dir === 'left' ? '◀' : '▶'}</span>
+          <span className="corner-text">
+            <b>{s.nextCorner.dir === 'left' ? 'LEFT' : 'RIGHT'} {s.nextCorner.severity === 3 ? 'ヘアピン' : s.nextCorner.severity === 2 ? '中速' : '高速'}</b>
+            <span>{s.nextCorner.distance < 8 ? 'NOW' : `${Math.round(s.nextCorner.distance / 5) * 5} m`}</span>
+          </span>
+        </div>
+      )}
+      {s.lastSplit && !s.finished && (
+        <div className={`sector-popup ${s.lastSplit.delta !== null && s.lastSplit.delta > 0 ? 'bad' : 'good'}`} key={s.lastSplit.key}>
+          <div className="sector-title">SECTION {s.lastSplit.index + 1} 通過</div>
+          <div className="sector-time">{formatTime(s.lastSplit.time)}</div>
+          <div className="sector-delta">{s.lastSplit.delta === null ? '初記録' : formatDelta(s.lastSplit.delta)}</div>
+        </div>
+      )}
 
       <div className="hud-bottom-left panel small">
         {s.gamepadConnected ? (
@@ -111,7 +126,7 @@ export function HUD() {
         )}
       </div>
 
-      {s.finished && (
+      {s.finished && !s.result && (
         <div className="finish-banner">
           <div className="finish-title">{s.rivalEnabled ? (s.rank === 1 ? 'WIN!' : `${s.rank} 位`) : 'GOAL!'}</div>
           <div className="finish-time">{s.finishTime !== null ? formatTime(s.finishTime) : ''}</div>

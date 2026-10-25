@@ -17,6 +17,9 @@ export interface GarageState {
   playerCharacterId: string
   navigatorCharacterId: string
   rivals: RivalEntry[]
+  /** アーケードのプレイヤー登録名（ランキングに残る） */
+  playerName: string
+  setPlayerName(name: string): void
   setCar(id: string): void
   setTuning(partial: Partial<CarTuning>): void
   setPart(category: PartCategory, id: string): void
@@ -41,6 +44,8 @@ export const useGarageStore = create<GarageState>()(
       playerCharacterId: 'haruto',
       navigatorCharacterId: 'misaki',
       rivals: DEFAULT_RIVALS,
+      playerName: 'PLAYER',
+      setPlayerName: (name) => set({ playerName: name.slice(0, 10) }),
       updateCharacter: (id, partial) => set((s) => ({ characters: s.characters.map((c) => (c.id === id ? { ...c, ...partial, avatar: { ...c.avatar, ...(partial.avatar ?? {}) } } : c)) })),
       setPlayerCharacter: (id) => set({ playerCharacterId: id }),
       setNavigator: (id) => set({ navigatorCharacterId: id }),
