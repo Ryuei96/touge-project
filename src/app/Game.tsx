@@ -46,6 +46,7 @@ declare global {
       runtime: typeof runtime
       course: BuiltCourse | null
       scene?: unknown
+      camera?: unknown
       requestReset(): void
     }
   }
@@ -54,9 +55,13 @@ declare global {
 /** デバッグ用: Three.js シーンを window.__touge に公開 */
 function ExposeScene() {
   const scene = useThree((s) => s.scene)
+  const camera = useThree((s) => s.camera)
   useEffect(() => {
-    if (window.__touge) window.__touge.scene = scene
-  }, [scene])
+    if (window.__touge) {
+      window.__touge.scene = scene
+      window.__touge.camera = camera
+    }
+  }, [scene, camera])
   return null
 }
 
@@ -123,7 +128,7 @@ export function Game() {
       <directionalLight position={[120, 160, -120]} intensity={1.6} />
       {course && (
         <Suspense fallback={null}>
-          <Physics key={course.definition.id} timeStep={1 / 60} gravity={[0, -9.81, 0]} interpolate>
+          <Physics key={course.definition.id} timeStep={1 / 60} gravity={[0, -9.81, 0]} interpolate updatePriority={-1}>
             <CourseScene course={course} />
             <Vehicle course={course} />
             {rivalEnabled && <RivalVehicle course={course} />}

@@ -1,6 +1,6 @@
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
-import { Vector3 } from 'three'
+import { Quaternion, Vector3 } from 'three'
 import { useGameStore, type CameraMode } from '../app/gameStore'
 import { runtime } from '../app/runtime'
 
@@ -18,6 +18,9 @@ export function FollowCamera() {
   const current = useRef(new Vector3())
   const initialized = useRef(false)
   const flatForward = useRef(new Vector3())
+  const pos = useRef(new Vector3())
+  const fwd = useRef(new Vector3())
+  const quat = useRef(new Quaternion())
 
   useEffect(() => {
     initialized.current = false
@@ -25,8 +28,19 @@ export function FollowCamera() {
 
   useFrame((_, dt) => {
     const o = OFFSETS[mode]
-    const p = runtime.position
-    const f = runtime.forward
+    // 物理の補間後に呼ばれるので、runtime の値（1 フレーム前）ではなく描画オブジェクトから直接読む
+    const obj = runtime.playerObject
+    let p: Vector3 = runtime.position
+    let f: Vector3 = runtime.forward
+    let q: Quaternion = runtime.quaternion
+    if (obj) {
+      obj.getWorldPosition(pos.current)
+      obj.getWorldQuaternion(quat.current)
+      fwd.current.set(0, 0, 1).applyQuaternion(quat.current)
+      p = pos.current
+      f = fwd.current
+      q = quat.current
+    }
     flatForward.current.set(f.x, 0, f.z)
     if (flatForward.current.lengthSq() < 1e-6) flatForward.current.set(0, 0, 1)
     flatForward.current.normalize()
@@ -44,7 +58,7 @@ export function FollowCamera() {
     }
     if (mode === 'hood') {
       camera.position.copy(desired.current)
-      camera.quaternion.copy(runtime.quaternion)
+      camera.quaternion.copy(q)
       // 車体に固定しつつ、前方を見る
       camera.lookAt(look.current)
     } else {

@@ -50,10 +50,12 @@ export function Vehicle({ course }: { course: BuiltCourse }) {
       runtime.progressIndex = 0
     }
     setVehicle(v)
+    runtime.playerObject = visualRef.current
     useGameStore.getState().patch({ physicsReady: true })
     return () => {
       v.dispose()
       setVehicle(null)
+      runtime.playerObject = null
       useGameStore.getState().patch({ physicsReady: false })
     }
   }, [world, start, cfg])

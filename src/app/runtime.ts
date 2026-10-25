@@ -2,7 +2,7 @@
  * フレーム毎に更新される可変状態（React の再レンダリングを介さずに共有する）。
  * 車両 → カメラ / レース判定 / HUD の低頻度反映に使う。
  */
-import { Quaternion, Vector3 } from 'three'
+import { Object3D, Quaternion, Vector3 } from 'three'
 import type { BuiltCourse, Pose } from '../course/types'
 
 export interface VehicleRuntime {
@@ -28,6 +28,8 @@ export interface VehicleRuntime {
   rival: RivalRuntime | null
   /** 現在のコース（HUD のミニマップ用） */
   course: BuiltCourse | null
+  /** 自車の描画オブジェクト（物理補間後の最新位置をカメラが直接読むため） */
+  playerObject: Object3D | null
 }
 
 export interface RivalRuntime {
@@ -56,4 +58,5 @@ export const runtime: VehicleRuntime = {
   handbrake: false,
   rival: null,
   course: null,
+  playerObject: null,
 }
