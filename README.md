@@ -52,6 +52,11 @@ URL パラメータ: `?course=sample-geo`（コース選択）, `?autopilot=1`�
 同梱コース: `touge01` 鳴沢峠（架空の峠）, `loop01` 湖畔サーキット（架空・3 周）, `sample-geo` GeoJSON + DEM + CityGML + 点群の合成サンプル,
 `bim-bridge` GLB（Blender 生成の道路 + 橋梁）から走行路を読む BIM サンプル。すべて架空データ。
 
+## デスクトップ版（exe）
+
+`desktop/` に Electron 版がある。同じソースをビルドして Chromium 同梱の実行ファイルにする。
+手順と Web 版との違いは `desktop/README.md` を参照（`npm run pack:win` で `desktop/release/TougeDrive-win32-x64/TougeDrive.exe`）。
+
 ## 技術スタック
 
 - React 19 + TypeScript 6 + Vite 8
@@ -183,7 +188,7 @@ docs/          open-data-roadmap.md（全国オープンデータ可視化・カ
 | ライバルの AI | 簡易 | pure pursuit + スタック時後退。追い抜きライン・ブロック・ライバル同士の駆け引きは未実装 |
 | 掛け合いの音声 | 未実装 | テキストのみ。音声合成（Web Speech API / 外部 TTS）は未接続 |
 | 車両モデル | 簡易形状 | 全車プリミティブ構成。Blender で作った GLB 車体の読み込みは `GlbAsset` で可能だが未接続 |
-| サウンド | 一部収録音源 | エンジン・スキール・風・衝突は Stunt Rally（VDrift / freesound CC BY-SA）の音源。BGM・チェックポイント音は合成。配布時はライセンス条件（表示・継承）に注意 |
+| サウンド | 収録音源 | エンジン・スキール・風・衝突は Stunt Rally（VDrift / freesound CC BY-SA）、BGM 2 曲は Phaser examples 同梱の CC 楽曲（Scyphe / Dafunk）。合成 BGM も選べる。配布時はライセンス条件（表示・継承・非営利等）に注意（`public/audio/LICENSE.md`） |
 
 ## 既知の技術的問題点
 

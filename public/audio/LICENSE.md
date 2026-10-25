@@ -14,4 +14,11 @@ Ogg Vorbis に変換したもの。Stunt Rally のコードは GPL-3.0 だが、
 | vehicle_bump_front1.ogg | vehicle/bump_front1.wav | VDrift | 同上 |
 | crash_01/03/06.ogg, crash_scrap.ogg, crash_screech.ogg | crash/*.wav | Halleck（freesound.org、Stunt Rally が編集） | CC BY-SA 3.0 |
 
-BGM・チェックポイント音・シフト音などは引き続き Web Audio で合成している（素材なし）。
+## BGM
+
+| ファイル | 曲 | アーティスト | 取得元 | 備考 |
+| --- | --- | --- | --- | --- |
+| bgm_goldrunner.ogg | Goldrunner (Maccie Pimp-Me-Up-Mix) | Scyphe | Phaser 3 examples リポジトリ（public/3.55/assets/audio） | Jamendo 系の CC 楽曲として Phaser のサンプルで配布されているもの。元のライセンス条項（CC BY / BY-NC 等）はリポジトリに明記がないため、個人利用に限定する |
+| bgm_hardcore_power.ogg | Hardcore Power (We Believe In Goa Remix) | Dafunk | 同上 | 冒頭 150 秒に切り出し、フェードアウト。同上 |
+
+チェックポイント音・シフト音・合成 BGM（ユーロビート風 / フォンク風）は Web Audio で合成している（素材なし）。

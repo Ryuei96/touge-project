@@ -55,6 +55,13 @@ export const useGarageStore = create<GarageState>()(
         set((s) => ({ placed: { ...s.placed, [courseId]: (s.placed[courseId] ?? []).filter((a) => a.id !== assetId) } })),
       clearPlaced: (courseId) => set((s) => ({ placed: { ...s.placed, [courseId]: [] } })),
     }),
-    { name: 'touge-garage-v3' },
+    {
+      name: 'touge-garage-v3',
+      // data: URL（デスクトップ版でローカルファイルから配置したモデル）は容量が大きいので保存しない
+      partialize: (s) => ({
+        ...s,
+        placed: Object.fromEntries(Object.entries(s.placed).map(([k, v]) => [k, v.filter((a) => !a.uri?.startsWith('data:'))])),
+      }),
+    },
   ),
 )

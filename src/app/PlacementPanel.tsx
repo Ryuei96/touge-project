@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { isDesktop } from '../assets/assetUri'
 import { MODEL_CATALOG, findModel } from '../assets/modelCatalog'
 import type { PlacedAsset } from '../course/types'
 import { useGameStore } from './gameStore'
@@ -15,22 +16,35 @@ export function PlacementPanel() {
   const [distance, setDistance] = useState(12)
   const [copied, setCopied] = useState(false)
 
-  const place = () => {
-    const m = findModel(modelId)
-    if (!m) return
+  const placeUri = (id: string, uri: string, offsetY: number, collision: PlacedAsset['collision']) => {
     const f = runtime.forward
     const p = runtime.position
     const heading = Math.atan2(f.x, f.z)
     const asset: PlacedAsset = {
-      id: `${m.id}-${Date.now().toString(36)}`,
+      id: `${id}-${Date.now().toString(36)}`,
       kind: 'glb',
-      uri: m.uri,
-      position: { x: p.x + f.x * distance, y: p.y - 0.6 + m.placeOffsetY, z: p.z + f.z * distance },
+      uri,
+      position: { x: p.x + f.x * distance, y: p.y - 0.6 + offsetY, z: p.z + f.z * distance },
       rotation: { x: 0, y: heading, z: 0 },
-      collision: m.collision,
+      collision,
     }
     addPlaced(courseId, asset)
   }
+  const place = () => {
+    const m = findModel(modelId)
+    if (!m) return
+    placeUri(m.id, m.uri, m.placeOffsetY, m.collision)
+  }
+  /** デスクトップ版: ローカルの GLB を選んで配置（data: URL なので localStorage には保存しない） */
+  const placeLocal = async () => {
+    const file = await window.tougeDesktop?.pickModel()
+    if (!file) return
+    placeUri(file.name.replace(/\W+/g, '-'), file.dataUrl, 0, 'trimesh')
+  }
+  useEffect(() => {
+    window.tougeDesktop?.onOpenModel(() => void placeLocal())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const copyJson = async () => {
     const text = JSON.stringify(placed, null, 2)
@@ -65,6 +79,11 @@ export function PlacementPanel() {
         <button className="mini" onClick={place}>
           ここに配置
         </button>
+        {isDesktop() && (
+          <button className="mini" onClick={() => void placeLocal()}>
+            ファイルから配置…
+          </button>
+        )}
         <button className="mini" onClick={copyJson} disabled={placed.length === 0}>
           {copied ? 'コピーしました' : 'JSON をコピー'}
         </button>

@@ -1,0 +1,19 @@
+{
+  "name": "touge-drive-desktop",
+  "version": "0.3.0",
+  "private": true,
+  "description": "TOUGE DRIVE WEB のデスクトップ版（Electron）。exe / 実行ファイルとして配布するための包み",
+  "main": "main.cjs",
+  "scripts": {
+    "build:web": "cd .. && npx vite build --base ./ --outDir desktop/app --emptyOutDir",
+    "start": "electron .",
+    "pack:win": "npm run build:web && electron-packager . TougeDrive --platform=win32 --arch=x64 --out=release --overwrite --ignore=\"^/release\" --ignore=\"^/node_modules/.cache\"",
+    "pack:linux": "npm run build:web && electron-packager . TougeDrive --platform=linux --arch=x64 --out=release --overwrite --ignore=\"^/release\"",
+    "pack:mac": "npm run build:web && electron-packager . TougeDrive --platform=darwin --arch=arm64 --out=release --overwrite --ignore=\"^/release\"",
+    "zip:win": "cd release && rm -f TougeDrive-win32-x64.zip && zip -qr TougeDrive-win32-x64.zip TougeDrive-win32-x64"
+  },
+  "devDependencies": {
+    "@electron/packager": "^18.3.6",
+    "electron": "^33.4.11"
+  }
+}

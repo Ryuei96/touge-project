@@ -11,7 +11,8 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "npm run typecheck && npm run lint && npm run test"
+    "check": "npm run typecheck && npm run lint && npm run test",
+    "build:desktop": "vite build --base ./ --outDir desktop/app --emptyOutDir"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",

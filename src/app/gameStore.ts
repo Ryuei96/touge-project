@@ -101,7 +101,7 @@ export const useGameStore = create<GameState>((set) => ({
   timeOfDay: (initialQuery?.get('time') as TimeOfDay | null) ?? 'day',
   dialogue: null,
   muted: initialQuery?.get('mute') === '1',
-  bgmStyle: (initialQuery?.get('bgm') as BgmStyle | null) ?? 'eurobeat',
+  bgmStyle: (initialQuery?.get('bgm') as BgmStyle | null) ?? 'goldrunner',
   postEffects: initialQuery?.get('fx') !== '0',
   gamepadConnected: false,
 

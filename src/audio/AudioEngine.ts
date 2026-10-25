@@ -28,7 +28,14 @@ export interface EngineSoundInput {
   wheelsOnGround: number
 }
 
-export type BgmStyle = 'eurobeat' | 'phonk' | 'off'
+/** 'goldrunner' / 'hardcore' は収録トラック、'eurobeat' / 'phonk' は合成 */
+export type BgmStyle = 'goldrunner' | 'hardcore' | 'eurobeat' | 'phonk' | 'off'
+
+export const BGM_TRACKS: Record<'goldrunner' | 'hardcore', { uri: string; title: string; artist: string }> = {
+  goldrunner: { uri: 'audio/bgm_goldrunner.ogg', title: 'Goldrunner (Maccie Pimp-Me-Up-Mix)', artist: 'Scyphe' },
+  hardcore: { uri: 'audio/bgm_hardcore_power.ogg', title: 'Hardcore Power (We Believe In Goa Remix)', artist: 'Dafunk' },
+}
+export const isTrackStyle = (s: BgmStyle): s is 'goldrunner' | 'hardcore' => s === 'goldrunner' || s === 'hardcore'
 export type SfxName = 'collision' | 'bump' | 'checkpoint' | 'finish' | 'shift' | 'start'
 
 const NOTE = (n: number) => 440 * Math.pow(2, (n - 69) / 12)
@@ -123,7 +130,7 @@ const PH_B: Section = {
   drums: PH_DRUMS,
 }
 
-export const BGM_STYLES: Record<Exclude<BgmStyle, 'off'>, BgmPattern> = {
+export const BGM_STYLES: Record<'eurobeat' | 'phonk', BgmPattern> = {
   eurobeat: { bpm: 158, order: [0, 0, 1, 0], sections: [EU_A, EU_B], leadType: 'supersaw', bassType: 'saw', leadDelay: true },
   phonk: { bpm: 142, order: [0, 0, 1, 0], sections: [PH_A, PH_B], leadType: 'cowbell', bassType: '808', swing: 0.08, leadDelay: false },
 }
@@ -228,6 +235,10 @@ export class AudioEngine {
   private sfxBus: GainNode | null = null
   private engine: EngineNodes | null = null
   private samples: Partial<Record<SampleKey, AudioBuffer>> = {}
+  private trackBuffers: Partial<Record<'goldrunner' | 'hardcore', AudioBuffer>> = {}
+  private trackSource: AudioBufferSourceNode | null = null
+  private trackGain: GainNode | null = null
+  private trackLoading: string | null = null
   private sampleEngine: SampleEngine | null = null
   private analyser: AnalyserNode | null = null
   private analyserBuf: Float32Array<ArrayBuffer> | null = null
@@ -238,7 +249,7 @@ export class AudioEngine {
   private bgmStep = 0
   private bgmNextTime = 0
   private _muted = false
-  private _style: BgmStyle = 'eurobeat'
+  private _style: BgmStyle = 'goldrunner'
   private gear = 0
   private shiftUntil = 0
   private shiftDirection = 0
@@ -267,6 +278,10 @@ export class AudioEngine {
     if (!this.engine) return 'off'
     if (this.sampleEngine) return 'samples'
     return this.engine.worklet ? 'worklet' : 'oscillator'
+  }
+  /** 収録 BGM を再生中か */
+  get trackPlaying(): boolean {
+    return this.trackSource !== null
   }
   /** 直近の出力ピーク（0..1、クリップ検査用） */
   get outputPeak(): number {
@@ -341,7 +356,7 @@ export class AudioEngine {
     // バス
     const bgmDuck = ctx.createGain()
     const bgmBus = ctx.createGain()
-    bgmBus.gain.value = this._style === 'off' ? 0 : 0.32
+    bgmBus.gain.value = this._style === 'eurobeat' || this._style === 'phonk' ? 0.32 : 0
     bgmBus.connect(bgmDuck).connect(master)
     this.bgmBus = bgmBus
     this.bgmDuck = bgmDuck
@@ -358,6 +373,7 @@ export class AudioEngine {
     this.bgmNextTime = ctx.currentTime + 0.1
     this.bgmStep = 0
     this.bgmTimer = window.setInterval(() => this.scheduleBgm(), 50)
+    if (isTrackStyle(this._style)) void this.playTrack(this._style)
   }
 
   private delayNode: DelayNode | null = null
@@ -575,8 +591,62 @@ export class AudioEngine {
   setStyle(style: BgmStyle): void {
     if (style !== this._style) this.bgmStep = 0
     this._style = style
-    if (this.bgmBus && this.ctx) this.bgmBus.gain.setTargetAtTime(style === 'off' ? 0 : 0.32, this.ctx.currentTime, 0.1)
-    if (this.delayNode && style !== 'off') this.delayNode.delayTime.value = (60 / BGM_STYLES[style].bpm) * 0.75
+    const ctx = this.ctx
+    if (!ctx) return
+    const synth = style === 'eurobeat' || style === 'phonk'
+    if (this.bgmBus) this.bgmBus.gain.setTargetAtTime(synth ? 0.32 : 0, ctx.currentTime, 0.1)
+    if (this.delayNode && synth) this.delayNode.delayTime.value = (60 / BGM_STYLES[style].bpm) * 0.75
+    if (isTrackStyle(style)) void this.playTrack(style)
+    else this.stopTrack()
+  }
+
+  private stopTrack(): void {
+    const ctx = this.ctx
+    if (this.trackSource && ctx && this.trackGain) {
+      const src = this.trackSource
+      this.trackGain.gain.setTargetAtTime(0, ctx.currentTime, 0.25)
+      window.setTimeout(() => {
+        try {
+          src.stop()
+        } catch {
+          /* already stopped */
+        }
+      }, 1200)
+      this.trackSource = null
+    }
+  }
+
+  /** 収録トラックをループ再生（読み込みは初回のみ） */
+  private async playTrack(key: 'goldrunner' | 'hardcore'): Promise<void> {
+    const ctx = this.ctx
+    if (!ctx || !this.master) return
+    this.stopTrack()
+    if (!this.trackBuffers[key]) {
+      if (this.trackLoading === key) return
+      this.trackLoading = key
+      try {
+        const res = await fetch(resolveAssetUri(BGM_TRACKS[key].uri))
+        if (!res.ok) throw new Error(`${BGM_TRACKS[key].uri}: ${res.status}`)
+        this.trackBuffers[key] = await ctx.decodeAudioData(await res.arrayBuffer())
+      } catch (err) {
+        console.warn('[AudioEngine] BGM track failed, falling back to synth', err)
+        this.trackLoading = null
+        this.setStyle('eurobeat')
+        return
+      }
+      this.trackLoading = null
+      if (this._style !== key) return
+    }
+    const src = ctx.createBufferSource()
+    src.buffer = this.trackBuffers[key]!
+    src.loop = true
+    const g = ctx.createGain()
+    g.gain.setValueAtTime(0, ctx.currentTime)
+    g.gain.linearRampToValueAtTime(0.42, ctx.currentTime + 1.2)
+    src.connect(g).connect(this.master)
+    src.start()
+    this.trackSource = src
+    this.trackGain = g
   }
 
   /** 毎フレーム呼ぶ */
@@ -783,7 +853,7 @@ export class AudioEngine {
 
   private scheduleBgm(): void {
     const ctx = this.ctx
-    if (!ctx || !this.bgmBus || this._style === 'off') {
+    if (!ctx || !this.bgmBus || (this._style !== 'eurobeat' && this._style !== 'phonk')) {
       if (ctx) this.bgmNextTime = ctx.currentTime + 0.1
       return
     }
@@ -1037,6 +1107,7 @@ export class AudioEngine {
   }
 
   dispose(): void {
+    this.stopTrack()
     if (this.bgmTimer !== null) window.clearInterval(this.bgmTimer)
     this.bgmTimer = null
     void this.ctx?.close()

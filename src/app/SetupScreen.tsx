@@ -80,8 +80,10 @@ export function SetupScreen() {
               <label className="row small">
                 BGM
                 <select id="bgm-style" value={s.bgmStyle} onChange={(e) => s.patch({ bgmStyle: e.target.value as typeof s.bgmStyle })}>
-                  <option value="eurobeat">ユーロビート風</option>
-                  <option value="phonk">ドリフトフォンク風</option>
+                  <option value="goldrunner">Goldrunner（Scyphe・収録）</option>
+                  <option value="hardcore">Hardcore Power（Dafunk・収録）</option>
+                  <option value="eurobeat">ユーロビート風（合成）</option>
+                  <option value="phonk">ドリフトフォンク風（合成）</option>
                   <option value="off">なし</option>
                 </select>
                 <input id="muted" type="checkbox" checked={s.muted} onChange={(e) => s.patch({ muted: e.target.checked })} /> ミュート (M)

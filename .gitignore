@@ -23,3 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 dist-single
+
+# desktop (Electron)
+desktop/node_modules
+desktop/app
+desktop/release
