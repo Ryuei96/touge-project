@@ -27,6 +27,20 @@ npm run build      # 本番ビルド（dist/）
 | M | ミュート |
 | P | オートパイロット ON/OFF（検証用） |
 
+ゲームパッド（PS5 DualSense / Xbox、Gamepad API 標準マッピング。接続すると HUD に「パッド接続中」と出る）:
+
+| ボタン | 操作 |
+| --- | --- |
+| R2 / L2 | アクセル（アナログ）/ ブレーキ（停止後は後退） |
+| 左スティック・十字キー左右 | ステアリング |
+| □ / L1 | サイドブレーキ |
+| △ | 復帰 |
+| ○ | カメラ切替 |
+| × | 決定（走り出す・会話を進める） |
+| OPTIONS | セットアップ画面 |
+
+衝突・スキール・発進時に振動（対応ブラウザのみ）。Chrome ではページ上で一度ボタンを押すとパッドが認識される。
+
 起動すると走行前セットアップ画面が出る（タブ: レース / ガレージ / キャラクター）。
 コース・時間帯（昼/夕方/夜）・BGM、車種・パーツ、キャラクターの名前・口調・見た目、ライバルのロスター（最大 4 台）を決めて
 「走り出す」とスタート前の会話シーンが始まり、その後にレース。ゴール後はレース後の会話が出る。
@@ -71,7 +85,7 @@ src/
                carCatalog（車種・パーツ）, CarBody（見た目）, autopilot（AutopilotDriver）, RivalVehicle
   race/        characters（キャラクター・口調別台詞テンプレート）, conversation（レース前後の会話）
   audio/       AudioEngine（AudioWorklet エンジン音・環境音・SE・BGM 2 スタイル）, engineWorklet（爆発パルス合成）
-  input/       keyboard
+  input/       keyboard, gamepad（Gamepad API、DualSense/Xbox 標準マッピング、振動）
   camera/      FollowCamera
   app/         Game（Canvas / Physics）, HUD, SetupScreen, GaragePanel, CharacterPanel, PlacementPanel, Minimap,
                DialogueOverlay, ConversationScene, Avatar, SceneEffects（影・ポストプロセス）, timePresets,
@@ -150,6 +164,7 @@ docs/          open-data-roadmap.md（全国オープンデータ可視化・カ
 | 追加 | キャラクター設定（名前・口調・似顔絵）とレース前後の会話シーン | 確認済み（画面表示・台詞生成） |
 | 追加 | AudioWorklet エンジン音（爆発パルス合成・慣性付き回転数・5 速）、環境音、SE、リバーブ付き BGM | ヘッドレスで worklet 動作と回転数変化を確認。音質は実機で要確認 |
 | 追加 | ヘッドライト（スポットライト + グロー）、クリアコート塗装、環境反射、昼/夕方/夜 | 確認済み（夜間に路面が照らされる） |
+| 追加 | ゲームパッド操作（R2/L2/スティック/各ボタン、メニュー決定） | 仮想パッドを注入して確認。実機の DualSense は未検証（Bluetooth/USB どちらでも標準マッピングになる想定） |
 | 追加 | PLATEAU 形式 CityGML（LOD1）と PLY 点群のレイヤー表示・建物衝突 | 確認済み（合成データ） |
 | 追加 | LAS 1.2〜1.4 点群の解析 | 単体テストのみ（実データ未検証） |
 

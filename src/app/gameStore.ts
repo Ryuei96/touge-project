@@ -54,6 +54,8 @@ export interface GameState {
   bgmStyle: BgmStyle
   /** ポストプロセス（Bloom / Vignette / SMAA） */
   postEffects: boolean
+  gamepadConnected: boolean
+  gamepadId?: string
 
   setCourse(id: string): void
   setStatus(status: GameState['status'], message?: string): void
@@ -101,6 +103,7 @@ export const useGameStore = create<GameState>((set) => ({
   muted: initialQuery?.get('mute') === '1',
   bgmStyle: (initialQuery?.get('bgm') as BgmStyle | null) ?? 'eurobeat',
   postEffects: initialQuery?.get('fx') !== '0',
+  gamepadConnected: false,
 
   setCourse: (id) => set({ courseId: id, status: 'loading', elapsed: 0, started: false, finished: false, finishTime: null, checkpointIndex: 0, progress: 0, resets: 0, lap: 1, rank: 1, rivalFinished: false, dialogue: null, outroShown: false }),
   setStatus: (status, message) => set({ status, errorMessage: message }),

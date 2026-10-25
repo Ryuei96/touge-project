@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { ConversationScene } from './app/ConversationScene'
 import { Game } from './app/Game'
+import { GamepadBridge } from './app/GamepadBridge'
 import { HUD } from './app/HUD'
 import { SetupScreen } from './app/SetupScreen'
 import { useGameStore } from './app/gameStore'
@@ -16,6 +17,7 @@ export default function App() {
   return (
     <div className="app">
       <Game />
+      <GamepadBridge />
       <HUD />
       {!setupDone && !intro && <SetupScreen />}
       {intro && <ConversationScene kind="pre" onDone={finishIntro} />}

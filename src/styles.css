@@ -110,3 +110,5 @@ button.small-primary { font-size: 14px; padding: 6px 16px; }
 .rival-list { display: flex; flex-direction: column; gap: 4px; }
 .rival-row { display: grid; grid-template-columns: 20px 1fr 1.3fr 0.8fr; gap: 6px; align-items: center; }
 @media (max-width: 720px) { .character-list { grid-template-columns: 1fr; } }
+
+.pad-badge { margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: rgba(61,220,255,0.18); border: 1px solid rgba(61,220,255,0.5); color: #bdf0ff; font-size: 11px; }

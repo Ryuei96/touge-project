@@ -11,6 +11,7 @@ import { useGameStore } from '../app/gameStore'
 import { runtime } from '../app/runtime'
 import type { BuiltCourse } from '../course/types'
 import { keyboard, type DriveInput } from '../input/keyboard'
+import { gamepad, mergeInputs } from '../input/gamepad'
 import { useGarageStore } from '../app/garageStore'
 import { audioEngine } from '../audio/AudioEngine'
 import { AutopilotDriver } from './autopilot'
@@ -31,6 +32,7 @@ export function Vehicle({ course }: { course: BuiltCourse }) {
   const { world } = useRapier()
   const [vehicle, setVehicle] = useState<RaycastVehicle | null>(null)
   const hudTimer = useRef(0)
+  const rumbleTimer = useRef(0)
   const tmpForward = useMemo(() => new Vector3(), [])
   const tmpQuat = useMemo(() => new Quaternion(), [])
   const tmpVel = useMemo(() => new Vector3(), [])
@@ -43,6 +45,7 @@ export function Vehicle({ course }: { course: BuiltCourse }) {
     if (force < 1500 || now - lastHit.current < 400) return
     lastHit.current = now
     audioEngine.playSfx('collision')
+    gamepad.rumble(Math.min(1, force / 12000), 0.4, 220)
   }
 
   const start = course.markers.start
@@ -90,7 +93,7 @@ export function Vehicle({ course }: { course: BuiltCourse }) {
       vehicle.teleport(runtime.respawn ?? start)
     }
 
-    let input = keyboard.read()
+    let input = mergeInputs(keyboard.read(), gamepad.read())
     if (state.autopilot) {
       const r = driver.current.update(course.samples, runtime.position, runtime.forward, runtime.speedMs, runtime.progressIndex, w.timestep, { closed: course.definition.closed })
       input = state.finished ? { throttle: 0, brake: 1, steer: r.input.steer, handbrake: false } : r.input
@@ -131,6 +134,13 @@ export function Vehicle({ course }: { course: BuiltCourse }) {
     const lateral = Math.abs(tmpVel.x * tmpForward.z - tmpVel.z * tmpForward.x)
     const skid = Math.min(1, lateral / 6) + (runtime.handbrake && Math.abs(runtime.speedMs) > 3 ? 0.5 : 0)
     audioEngine.update({ throttle: runtime.throttle, speedMs: Math.abs(runtime.speedMs), maxSpeedMs: cfg.maxSpeed, skid, wheelsOnGround: runtime.wheelsOnGround })
+    // 振動: スキール中は弱く連続、エンジン回転に応じた微振動
+    rumbleTimer.current += dt
+    if (rumbleTimer.current > 0.1) {
+      rumbleTimer.current = 0
+      if (skid > 0.25) gamepad.rumble(0, Math.min(0.5, skid * 0.5), 120)
+      else if (runtime.throttle > 0.5 && Math.abs(runtime.speedMs) < 4) gamepad.rumble(0.12, 0.05, 120)
+    }
 
     // ホイール表示
     const ws = vehicle.wheelStates()

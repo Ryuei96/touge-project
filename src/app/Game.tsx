@@ -11,6 +11,7 @@ import { RivalVehicle } from '../vehicle/RivalVehicle'
 import { Vehicle } from '../vehicle/Vehicle'
 import { audioEngine } from '../audio/AudioEngine'
 import { keyboard } from '../input/keyboard'
+import { gamepad } from '../input/gamepad'
 import { useGameStore } from './gameStore'
 import { useGarageStore } from './garageStore'
 import { TIME_PRESETS } from './timePresets'
@@ -50,6 +51,7 @@ declare global {
       scene?: unknown
       camera?: unknown
       audio: typeof audioEngine
+      gamepad: typeof gamepad
       requestReset(): void
     }
   }
@@ -117,6 +119,7 @@ export function Game() {
       runtime,
       course,
       audio: audioEngine,
+      gamepad,
       requestReset: () => {
         runtime.resetRequested = true
       },

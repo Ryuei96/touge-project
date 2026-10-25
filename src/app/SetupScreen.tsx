@@ -98,7 +98,9 @@ export function SetupScreen() {
           <button className="primary" onClick={start} disabled={s.status !== 'ready'}>
             走り出す
           </button>
-          <span className="small">W/S アクセル・ブレーキ　A/D ステア　Space サイド　R 復帰　C カメラ　M ミュート</span>
+          <span className="small">
+            {s.gamepadConnected ? '🎮 R2 アクセル　L2 ブレーキ　左スティック ステア　□ サイド　△ 復帰　○ カメラ　× 決定' : 'W/S アクセル・ブレーキ　A/D ステア　Space サイド　R 復帰　C カメラ　M ミュート'}
+          </span>
         </div>
       </div>
     </div>

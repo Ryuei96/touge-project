@@ -47,7 +47,14 @@ export function HUD() {
             順位 <b className={s.rank === 1 ? 'rank-first' : 'rank-second'}>{s.rank} 位</b> / {s.rankTotal} {s.rivalFinished && !s.finished && '（先にゴールした車あり）'}
           </div>
         )}
-        <div className="row small">カメラ: {CAMERA_LABELS[s.cameraMode]} (C) ・ 復帰 {s.resets} 回 (R)</div>
+        <div className="row small">
+          カメラ: {CAMERA_LABELS[s.cameraMode]} (C) ・ 復帰 {s.resets} 回 (R)
+          {s.gamepadConnected && (
+            <span className="pad-badge" title={s.gamepadId}>
+              🎮 パッド接続中
+            </span>
+          )}
+        </div>
         <label className="row small">
           <input type="checkbox" checked={s.autopilot} onChange={(e) => s.setAutopilot(e.target.checked)} /> オートパイロット (P)
         </label>
@@ -91,8 +98,17 @@ export function HUD() {
       </div>
 
       <div className="hud-bottom-left panel small">
-        <div>W/S アクセル・ブレーキ(後退)　A/D ステア</div>
-        <div>Space サイドブレーキ　R 復帰　C カメラ切替</div>
+        {s.gamepadConnected ? (
+          <>
+            <div>R2 アクセル　L2 ブレーキ(後退)　左スティック ステア</div>
+            <div>□ サイドブレーキ　△ 復帰　○ カメラ　× 決定　OPTIONS セットアップ</div>
+          </>
+        ) : (
+          <>
+            <div>W/S アクセル・ブレーキ(後退)　A/D ステア</div>
+            <div>Space サイドブレーキ　R 復帰　C カメラ切替</div>
+          </>
+        )}
       </div>
 
       {s.finished && (
