@@ -18,10 +18,10 @@ const escapeReplacement = (s) => s.replace(/\uFFFD/g, '\\uFFFD')
 // public/models と public/samples を data: URI として埋め込む（Artifact は GLB/PLY を配信できないため）
 const MIME = { glb: 'model/gltf-binary', ply: 'application/octet-stream', gml: 'application/xml', xml: 'application/xml', las: 'application/octet-stream', ogg: 'audio/ogg', mp3: 'audio/mpeg', wav: 'audio/wav' }
 const assets = {}
-for (const dir of ['models', 'samples', 'audio']) {
+for (const dir of ['models', 'models/cars', 'samples', 'audio']) {
   for (const name of readdirSync(join('public', dir))) {
     const ext = name.split('.').pop()
-    if (ext === 'md') continue
+    if (ext === 'md' || !name.includes('.')) continue
     const data = readFileSync(join('public', dir, name))
     assets[`${dir}/${name}`] = `data:${MIME[ext] ?? 'application/octet-stream'};base64,${data.toString('base64')}`
   }

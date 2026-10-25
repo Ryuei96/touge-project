@@ -17,6 +17,7 @@ import { audioEngine } from '../audio/AudioEngine'
 import { AutopilotDriver } from './autopilot'
 import { CarBody } from './CarBody'
 import { WheelMesh } from './WheelMesh'
+import { DriftEffects } from './DriftEffects'
 import { getCarPreset, resolveVehicleConfig } from './carCatalog'
 import { RaycastVehicle } from './RaycastVehicle'
 import { DEFAULT_VEHICLE_CONFIG } from './vehicleConfig'
@@ -168,6 +169,8 @@ export function Vehicle({ course }: { course: BuiltCourse }) {
 
   const [hx, hy, hz] = cfg.chassisHalfExtents
   return (
+    <>
+    <DriftEffects config={cfg} />
     <RigidBody
       ref={bodyRef}
       type="dynamic"
@@ -203,5 +206,6 @@ export function Vehicle({ course }: { course: BuiltCourse }) {
         ))}
       </group>
     </RigidBody>
+    </>
   )
 }

@@ -4,8 +4,10 @@
  * エアロパーツ（リアウィング）に対応。
  */
 import { RoundedBox } from '@react-three/drei'
+import { Component, Suspense, type ReactNode } from 'react'
 import type { CarLook } from './carCatalog'
 import { CarLights } from './CarLights'
+import { CarModel } from './CarModel'
 import type { VehicleConfig } from './vehicleConfig'
 
 export interface CarBodyProps {
@@ -20,7 +22,31 @@ export interface CarBodyProps {
   spotlights?: boolean
 }
 
-export function CarBody({ look, config, bodyColor, wing, braking, spotlights }: CarBodyProps) {
+class ModelBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+  componentDidCatch(error: unknown) {
+    console.warn('[CarBody] GLB car model failed, using primitive body', error)
+  }
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children
+  }
+}
+
+/** GLB 車体を優先し、読み込めない場合はプリミティブ車体にフォールバック */
+export function CarBody(props: CarBodyProps) {
+  return (
+    <ModelBoundary fallback={<PrimitiveCarBody {...props} />}>
+      <Suspense fallback={<PrimitiveCarBody {...props} />}>
+        <CarModel look={props.look} config={props.config} bodyColor={props.bodyColor} wing={props.wing} braking={props.braking} spotlights={props.spotlights} modelUri={props.look.modelUri} />
+      </Suspense>
+    </ModelBoundary>
+  )
+}
+
+export function PrimitiveCarBody({ look, config, bodyColor, wing, braking, spotlights }: CarBodyProps) {
   const [hx, hy, hz] = config.chassisHalfExtents
   const body = bodyColor ?? look.body
   const upper = look.upper ?? body

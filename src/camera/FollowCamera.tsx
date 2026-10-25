@@ -1,6 +1,6 @@
-import { useFrame, useThree } from '@react-three/fiber'
+import { useFrame } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
-import { Quaternion, Vector3 } from 'three'
+import { PerspectiveCamera, Quaternion, Vector3 } from 'three'
 import { useGameStore, type CameraMode } from '../app/gameStore'
 import { runtime } from '../app/runtime'
 
@@ -11,7 +11,6 @@ const OFFSETS: Record<CameraMode, { back: number; up: number; lookUp: number; lo
 }
 
 export function FollowCamera() {
-  const camera = useThree((s) => s.camera)
   const mode = useGameStore((s) => s.cameraMode)
   const desired = useRef(new Vector3())
   const look = useRef(new Vector3())
@@ -26,7 +25,8 @@ export function FollowCamera() {
     initialized.current = false
   }, [mode])
 
-  useFrame((_, dt) => {
+  useFrame((state, dt) => {
+    const camera = state.camera
     const o = OFFSETS[mode]
     // 物理の補間後に呼ばれるので、runtime の値（1 フレーム前）ではなく描画オブジェクトから直接読む
     const obj = runtime.playerObject
@@ -55,6 +55,23 @@ export function FollowCamera() {
     } else {
       const k = 1 - Math.exp(-o.damp * Math.min(dt, 0.1))
       current.current.lerp(desired.current, k)
+    }
+    // 速度で画角を広げ、高速域で微小に揺らす
+    const speed = Math.abs(runtime.speedMs)
+    const ratio = Math.min(1, speed / 55)
+    if ((camera as PerspectiveCamera).isPerspectiveCamera) {
+      const pc = camera as PerspectiveCamera
+      const targetFov = 60 + ratio * 16
+      if (Math.abs(pc.fov - targetFov) > 0.05) {
+        pc.fov += (targetFov - pc.fov) * Math.min(1, dt * 4)
+        pc.updateProjectionMatrix()
+      }
+    }
+    const shake = ratio > 0.6 ? (ratio - 0.6) * 0.06 : 0
+    if (shake > 0) {
+      desired.current.x += (Math.random() - 0.5) * shake
+      desired.current.y += (Math.random() - 0.5) * shake
+      look.current.y += (Math.random() - 0.5) * shake * 0.5
     }
     if (mode === 'hood') {
       camera.position.copy(desired.current)

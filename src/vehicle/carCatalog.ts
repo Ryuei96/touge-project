@@ -17,6 +17,8 @@ export interface CarLook {
   silhouette: 'hatch' | 'coupe' | 'sedan'
   /** リトラクタブル風のヘッドライト */
   popupLights?: boolean
+  /** シルエット既定以外の GLB を使うとき */
+  modelUri?: string
 }
 
 export interface CarPreset {
@@ -47,7 +49,7 @@ export const CAR_PRESETS: CarPreset[] = [
     id: 'black-gt',
     name: 'ブラック・GT',
     tagline: '黒の重量級ハイパワー GT。直線は速いが重さを感じる。',
-    look: { body: '#111214', cabin: '#2a2d33', wheel: '#9a9a9a', silhouette: 'sedan' },
+    look: { body: '#111214', cabin: '#2a2d33', wheel: '#9a9a9a', silhouette: 'sedan', modelUri: 'models/cars/gt.glb' },
     config: { massKg: 1480, maxEngineForce: 4600, maxSpeed: 62, frictionSlip: 2.5, maxSteerLow: 0.55, angularDamping: 0.8, chassisHalfExtents: [0.9, 0.3, 2.25], wheelbaseHalf: 1.36 },
   },
   {
@@ -60,6 +62,13 @@ export const CAR_PRESETS: CarPreset[] = [
 ]
 
 export const DEFAULT_CAR_ID = CAR_PRESETS[0].id
+
+/** シルエットごとの既定 GLB（tools/blender/make_cars.py が生成） */
+export const CAR_MODEL_URIS: Record<CarLook['silhouette'], string> = {
+  coupe: 'models/cars/coupe.glb',
+  hatch: 'models/cars/hatch.glb',
+  sedan: 'models/cars/sedan.glb',
+}
 
 // ---------------------------------------------------------------- パーツ
 

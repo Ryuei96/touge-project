@@ -96,7 +96,7 @@ src/
                DialogueOverlay, ConversationScene, Avatar, SceneEffects（影・ポストプロセス）, timePresets,
                RaceController（CP・周回・ゴール・順位・掛け合いトリガー）, gameStore, garageStore, runtime
   __tests__/   vitest 単体テスト
-tools/blender/ make_sample_assets.py（サンプル GLB 生成）, README.md（BlenderMCP の設定）
+tools/blender/ make_sample_assets.py（サンプル GLB 生成）, make_cars.py（車体 GLB 生成）, README.md（BlenderMCP の設定）
 scripts/       make-sample-geo.mjs（合成 CityGML / PLY 生成）, make-artifact-page.mjs（単一 HTML → Artifact 用）
 docs/          open-data-roadmap.md（全国オープンデータ可視化・カスタムコース提供の設計）
 ```
@@ -170,6 +170,7 @@ docs/          open-data-roadmap.md（全国オープンデータ可視化・カ
 | 追加 | 収録音源によるエンジン音（2 ループのクロスフェード、慣性付き回転数・5 速）、タイヤスキール、風切り音、衝突音。読み込み失敗時は AudioWorklet 合成にフォールバック | ヘッドレスで音源の読み込みと出力ピーク（最大 0.48、クリップ無し）を確認。音質は実機で要確認 |
 | 追加 | ヘッドライト（スポットライト + グロー）、クリアコート塗装、環境反射、昼/夕方/夜 | 確認済み（夜間に路面が照らされる） |
 | 追加 | ゲームパッド操作（R2/L2/スティック/各ボタン、メニュー決定） | 仮想パッドを注入して確認。実機の DualSense は未検証（Bluetooth/USB どちらでも標準マッピングになる想定） |
+| 追加 | Blender 生成の GLB 車体（4 種）、タイヤスモーク、スキッドマーク、速度連動の画角と揺れ | 確認済み（ゲーム内描画・ドリフト時のスモーク） |
 | 追加 | PLATEAU 形式 CityGML（LOD1）と PLY 点群のレイヤー表示・建物衝突 | 確認済み（合成データ） |
 | 追加 | LAS 1.2〜1.4 点群の解析 | 単体テストのみ（実データ未検証） |
 
@@ -187,7 +188,7 @@ docs/          open-data-roadmap.md（全国オープンデータ可視化・カ
 | AI 景観生成・自然言語コース編集 | 未実装 | `SceneryInstances` と `layers` を AI 生成の受け皿にする想定 |
 | ライバルの AI | 簡易 | pure pursuit + スタック時後退。追い抜きライン・ブロック・ライバル同士の駆け引きは未実装 |
 | 掛け合いの音声 | 未実装 | テキストのみ。音声合成（Web Speech API / 外部 TTS）は未接続 |
-| 車両モデル | 簡易形状 | 全車プリミティブ構成。Blender で作った GLB 車体の読み込みは `GlbAsset` で可能だが未接続 |
+| 車両モデル | Blender 生成 GLB | `tools/blender/make_cars.py` が側面・平面シルエットから 4 車種（coupe / hatch / sedan / gt）を生成。塗装・ガラス・ランプはマテリアル名で差し替え。手作業のモデルに置き換えるときも同じマテリアル名にすれば読める |
 | サウンド | 収録音源 | エンジン・スキール・風・衝突は Stunt Rally（VDrift / freesound CC BY-SA）、BGM 2 曲は Phaser examples 同梱の CC 楽曲（Scyphe / Dafunk）。合成 BGM も選べる。配布時はライセンス条件（表示・継承・非営利等）に注意（`public/audio/LICENSE.md`） |
 
 ## 既知の技術的問題点
