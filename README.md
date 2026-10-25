@@ -1,6 +1,8 @@
 # TOUGE DRIVE WEB v0.3
 
 Chrome 上で遊べる 3D 峠ドライブゲーム。道路中心線から峠道を自動生成し、Rapier 物理の FR 車両で走る。
+車種・パーツのカスタマイズ、ライバル車との対戦と掛け合い、ミニマップ・周回表示、合成サウンド/BGM、
+GLB（BIM/CIM）モデルの走行・配置、PLATEAU CityGML と点群の取り込みに対応している。
 
 将来の BIM/CIM モデル読み込み・実在道路の線形/標高からのコース生成・AI 景観生成・有料カスタムコースに
 対応できるよう、コースデータとジオデータ処理をゲーム本体から分離した構成にしている。
@@ -22,9 +24,17 @@ npm run build      # 本番ビルド（dist/）
 | Space | サイドブレーキ（後輪ロック + 後輪グリップ低下でスライド） |
 | R | 復帰（最後に通過したチェックポイントへ） |
 | C | カメラ切替（追従 / ボンネット / 俯瞰） |
+| M | ミュート |
 | P | オートパイロット ON/OFF（検証用） |
 
-URL パラメータ: `?course=sample-geo`（コース選択）, `?autopilot=1`（自動走行で開始）。
+起動すると走行前セットアップ画面が出る。コース・車種・パーツ・ライバル・BGM を決めて「走り出す」。
+走行中も左上の「ガレージ」「モデル配置」「セットアップ」から変更できる。
+
+URL パラメータ: `?course=sample-geo`（コース選択）, `?autopilot=1`（自動走行で開始、セットアップを省略）,
+`?rival=1`（ライバルあり）, `?bgm=phonk|eurobeat|off`, `?mute=1`, `?skipSetup=1`。
+
+同梱コース: `touge01` 鳴沢峠（架空の峠）, `loop01` 湖畔サーキット（架空・3 周）, `sample-geo` GeoJSON + DEM + CityGML + 点群の合成サンプル,
+`bim-bridge` GLB（Blender 生成の道路 + 橋梁）から走行路を読む BIM サンプル。すべて架空データ。
 
 ## 技術スタック
 
@@ -32,6 +42,8 @@ URL パラメータ: `?course=sample-geo`（コース選択）, `?autopilot=1`�
 - Three.js 0.186 / @react-three/fiber 9 / @react-three/drei 10
 - Rapier 0.19（@dimforge/rapier3d-compat）/ @react-three/rapier 2
 - zustand（HUD 状態）、vitest（単体テスト）、oxlint
+- fast-xml-parser（CityGML）、Web Audio API（合成サウンド）
+- Blender 4.0（ヘッドレスでサンプル GLB 生成）、BlenderMCP（`.mcp.json`、ローカルで利用）
 - 検証: Playwright + 同梱 Chromium（ヘッドレス、SwiftShader）
 
 ## ディレクトリ構成
@@ -48,12 +60,23 @@ src/
                CourseScene（BuiltCourse → Three.js / Rapier）
   geo/         CoordinateTransformer（緯度経度・投影座標 ⇔ ゲーム座標）
                GeoDataImporter（GeoJSON 線形 + DEM → CourseDefinition）
-  scenery/     SceneryGenerator（樹木配置）
-  vehicle/     vehicleConfig, RaycastVehicle（Rapier 車両コントローラーのラッパー）, Vehicle.tsx, autopilot
+               CityGmlImporter（PLATEAU CityGML → 建物メッシュ）, PointCloudImporter（PLY/LAS/XYZ）
+               openDataCatalog（国内オープンデータの目録）
+  bim/         GlbReader（Three.js 非依存 GLB パーサー）, BimModelImporter（走行路抽出・軸/単位補正）
+  assets/      GlbAsset（GLB の描画 + 衝突）, modelCatalog（配置できるモデル一覧）
+  scenery/     SceneryGenerator（樹木配置）, EnvironmentLayers（点群・建物レイヤー）
+  vehicle/     vehicleConfig, RaycastVehicle（Rapier 車両コントローラーのラッパー）, Vehicle.tsx,
+               carCatalog（車種・パーツ）, CarBody（見た目）, autopilot（AutopilotDriver）, RivalVehicle
+  race/        dialogue（掛け合い台詞・オリジナルキャラクター）
+  audio/       AudioEngine（エンジン音・スキール・BGM 2 スタイル）
   input/       keyboard
   camera/      FollowCamera
-  app/         Game（Canvas / Physics）, HUD, RaceController（CP・ゴール・タイム）, gameStore, runtime
+  app/         Game（Canvas / Physics）, HUD, SetupScreen, GaragePanel, PlacementPanel, Minimap, DialogueOverlay,
+               RaceController（CP・周回・ゴール・順位・会話トリガー）, gameStore, garageStore, runtime
   __tests__/   vitest 単体テスト
+tools/blender/ make_sample_assets.py（サンプル GLB 生成）, README.md（BlenderMCP の設定）
+scripts/       make-sample-geo.mjs（合成 CityGML / PLY 生成）, make-artifact-page.mjs（単一 HTML → Artifact 用）
+docs/          open-data-roadmap.md（全国オープンデータ可視化・カスタムコース提供の設計）
 ```
 
 ### 設計上の分離
@@ -116,21 +139,30 @@ src/
 | 4 | スタート・ゴール・チェックポイント・タイム計測・ゴール表示 | 確認済み |
 | 5 | GeoJSON 線形 + 配列 DEM → `GeoDataImporter` → `CourseDefinition(geospatial)` → 同じパイプラインで走行 | 確認済み（合成データの `sample-geo` をオートパイロットで完走、52.0 s） |
 | 5 | `CoordinateTransformer`（緯度経度 / 投影座標 ⇔ ゲーム座標、往復変換） | 確認済み（単体テスト） |
+| 追加 | GLB 読み込み（`GlbReader`）と BIM コース（`bim-bridge`、GLB のデッキ上を走行） | 確認済み（自動走行で完走、107 km/h） |
+| 追加 | 既存コースへの GLB 配置（鳥居・橋梁セグメント）と trimesh 衝突 | 確認済み（描画・走行） |
+| 追加 | 車種 4 種・パーツ 6 カテゴリ・走行前セットアップ画面 | 確認済み（画面表示・パラメータ反映） |
+| 追加 | ミニマップ・進行バー・周回（`loop01` 3 周完走） | 確認済み |
+| 追加 | ライバル車（3 段階）・順位・掛け合い（9 本表示） | 確認済み（ライバル完走、プレイヤーも完走） |
+| 追加 | 合成サウンド（エンジン・スキール・BGM 2 スタイル） | 実装済み。ヘッドレスではエラー無しを確認、音質は実機で要確認 |
+| 追加 | PLATEAU 形式 CityGML（LOD1）と PLY 点群のレイヤー表示・建物衝突 | 確認済み（合成データ） |
+| 追加 | LAS 1.2〜1.4 点群の解析 | 単体テストのみ（実データ未検証） |
 
 
 ## 未実装・今後の機能
 
 | 機能 | 状態 | 備考 |
 | --- | --- | --- |
-| BIM/CIM（GLB・FBX）モデルの読み込み・走行 | 未実装 | `PlacedAsset.kind = 'glb'` の型と `source = 'bim'` の分岐（NotImplemented を返す）のみ。GLB は drei `useGLTF` + Rapier `trimesh` で対応予定。FBX は Blender で GLB へ変換する方針 |
-| 既存コースへの外部モデル配置 | 一部 | primitive（box 等）の配置と box 衝突は動作。GLB 配置 UI は未実装 |
-| 道路・橋梁モデルと既存走行路の接続 | 未実装 | 中心線の接続点（端点・接線）を `CourseDefinition` に持たせる設計が必要 |
-| 実在道路の線形・標高からのコース生成 | 設計のみ | `GeoDataImporter` はオフラインの GeoJSON + 配列 DEM のみ対応。国土地理院標高タイル・道路線形 API の取得は未実装（`GeoSourceNotImplementedError`）。proj4 による正式な投影変換も未導入（局所近似のみ） |
-| AI 景観生成・自然言語コース編集 | 未実装 | `SceneryGenerator` の出力形式 `SceneryInstances` を AI 生成の受け皿にする想定 |
-| カスタムコース生成の有料サービス化 | 未実装 | 本リリースではオンライン API・課金は対象外 |
-| 地図 UI（MapLibre） | 未実装 | 第一候補として MapLibre を想定 |
-| Blender + BlenderMCP による 3D アセット | 未実装 | 現状は全て簡易プリミティブ |
-| 効果音・BGM | 未実装 | |
+| BIM/CIM（GLB）モデルの読み込み・走行 | 実装済み | ノード名 `Road_` / `Deck_` 等を走行路として抽出。FBX は Blender で GLB へ変換する（`tools/blender/README.md`）。IFC 直読みは未対応 |
+| 既存コースへの外部モデル配置 | 実装済み | 「モデル配置」パネルから車の前方に配置。配置は localStorage 保存、JSON をコース定義へ貼り付け可能。ドラッグ移動 UI は未実装 |
+| 道路・橋梁モデルと既存走行路の接続 | 一部 | 配置した橋梁セグメントの上は走れるが、既存路面との段差の自動すり合わせ（高さ合わせ・接続点のスナップ）は未実装 |
+| 実在道路の線形・標高からのコース生成 | オフライン対応 | GeoJSON + DEM グリッド + CityGML + 点群をファイルから読める。国土地理院タイル・OSM API の取得、proj4 の投影変換、LAZ 展開は未実装（`docs/open-data-roadmap.md`） |
+| 全国オープンデータの可視化・場所選択 | 設計のみ | MapLibre + `openDataCatalog`。`docs/open-data-roadmap.md` 参照 |
+| カスタムコース生成の有料化 / カミングスーン要望 | 設計のみ | 決済・リクエスト管理・生成ジョブのバックエンドが必要。同文書参照 |
+| AI 景観生成・自然言語コース編集 | 未実装 | `SceneryInstances` と `layers` を AI 生成の受け皿にする想定 |
+| ライバルの AI | 簡易 | pure pursuit + スタック時後退。追い抜きライン・ブロックは未実装 |
+| 車両モデル | 簡易形状 | 全車プリミティブ構成。Blender で作った GLB 車体の読み込みは `GlbAsset` で可能だが未接続 |
+| サウンド | 合成のみ | 録音素材なし。実機での音量バランス調整が必要 |
 
 ## 既知の技術的問題点
 
@@ -152,7 +184,7 @@ src/
 ## 検証方法
 
 ```bash
-npm run check                      # tsc + oxlint + vitest（28 テスト）
+npm run check                      # tsc + oxlint + vitest（49 テスト）
 npm run dev                        # 手動: Chrome で操作確認
 ```
 

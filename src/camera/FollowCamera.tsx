@@ -7,7 +7,7 @@ import { runtime } from '../app/runtime'
 const OFFSETS: Record<CameraMode, { back: number; up: number; lookUp: number; lookAhead: number; damp: number }> = {
   chase: { back: 7.5, up: 2.8, lookUp: 1.0, lookAhead: 3, damp: 5 },
   far: { back: 14, up: 7, lookUp: 1.2, lookAhead: 6, damp: 4 },
-  hood: { back: -0.9, up: 1.05, lookUp: 0.9, lookAhead: 12, damp: 60 },
+  hood: { back: -2.4, up: 0.75, lookUp: 0.7, lookAhead: 14, damp: 60 },
 }
 
 export function FollowCamera() {
