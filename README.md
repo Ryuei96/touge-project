@@ -58,7 +58,7 @@ URL パラメータ: `?course=sample-geo`（コース選択）, `?autopilot=1`�
 - Three.js 0.186 / @react-three/fiber 9 / @react-three/drei 10
 - Rapier 0.19（@dimforge/rapier3d-compat）/ @react-three/rapier 2
 - zustand（HUD 状態）、vitest（単体テスト）、oxlint
-- fast-xml-parser（CityGML）、Web Audio API（合成サウンド）
+- fast-xml-parser（CityGML）、Web Audio API（収録音源 + 合成）。音源は Stunt Rally / VDrift 由来（`public/audio/LICENSE.md`）
 - Blender 4.0（ヘッドレスでサンプル GLB 生成）、BlenderMCP（`.mcp.json`、ローカルで利用）
 - 検証: Playwright + 同梱 Chromium（ヘッドレス、SwiftShader）
 
@@ -162,7 +162,7 @@ docs/          open-data-roadmap.md（全国オープンデータ可視化・カ
 | 追加 | ミニマップ・進行バー・周回（`loop01` 3 周完走） | 確認済み |
 | 追加 | ライバル車（最大 4 台、3 段階）・順位 N/M・口調別の掛け合い | 確認済み（3 台同時出走、順位・会話表示） |
 | 追加 | キャラクター設定（名前・口調・似顔絵）とレース前後の会話シーン | 確認済み（画面表示・台詞生成） |
-| 追加 | AudioWorklet エンジン音（爆発パルス合成・慣性付き回転数・5 速）、環境音、SE、リバーブ付き BGM | ヘッドレスで worklet 動作と回転数変化を確認。音質は実機で要確認 |
+| 追加 | 収録音源によるエンジン音（2 ループのクロスフェード、慣性付き回転数・5 速）、タイヤスキール、風切り音、衝突音。読み込み失敗時は AudioWorklet 合成にフォールバック | ヘッドレスで音源の読み込みと出力ピーク（最大 0.48、クリップ無し）を確認。音質は実機で要確認 |
 | 追加 | ヘッドライト（スポットライト + グロー）、クリアコート塗装、環境反射、昼/夕方/夜 | 確認済み（夜間に路面が照らされる） |
 | 追加 | ゲームパッド操作（R2/L2/スティック/各ボタン、メニュー決定） | 仮想パッドを注入して確認。実機の DualSense は未検証（Bluetooth/USB どちらでも標準マッピングになる想定） |
 | 追加 | PLATEAU 形式 CityGML（LOD1）と PLY 点群のレイヤー表示・建物衝突 | 確認済み（合成データ） |
@@ -183,7 +183,7 @@ docs/          open-data-roadmap.md（全国オープンデータ可視化・カ
 | ライバルの AI | 簡易 | pure pursuit + スタック時後退。追い抜きライン・ブロック・ライバル同士の駆け引きは未実装 |
 | 掛け合いの音声 | 未実装 | テキストのみ。音声合成（Web Speech API / 外部 TTS）は未接続 |
 | 車両モデル | 簡易形状 | 全車プリミティブ構成。Blender で作った GLB 車体の読み込みは `GlbAsset` で可能だが未接続 |
-| サウンド | 合成のみ | 録音素材なし。実機での音量バランス調整が必要 |
+| サウンド | 一部収録音源 | エンジン・スキール・風・衝突は Stunt Rally（VDrift / freesound CC BY-SA）の音源。BGM・チェックポイント音は合成。配布時はライセンス条件（表示・継承）に注意 |
 
 ## 既知の技術的問題点
 

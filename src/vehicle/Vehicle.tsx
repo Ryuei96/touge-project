@@ -44,7 +44,7 @@ export function Vehicle({ course }: { course: BuiltCourse }) {
     const now = performance.now()
     if (force < 1500 || now - lastHit.current < 400) return
     lastHit.current = now
-    audioEngine.playSfx('collision')
+    audioEngine.playSfx(force > 6000 ? 'collision' : 'bump')
     gamepad.rumble(Math.min(1, force / 12000), 0.4, 220)
   }
 

@@ -12,6 +12,7 @@
  *
  * ブラウザの自動再生制限のため、最初のユーザー操作（キー/クリック）後に start() を呼ぶ。
  */
+import { resolveAssetUri } from '../assets/assetUri'
 import { ENGINE_WORKLET_SOURCE } from './engineWorklet'
 
 export interface EngineSoundInput {
@@ -28,7 +29,7 @@ export interface EngineSoundInput {
 }
 
 export type BgmStyle = 'eurobeat' | 'phonk' | 'off'
-export type SfxName = 'collision' | 'checkpoint' | 'finish' | 'shift' | 'start'
+export type SfxName = 'collision' | 'bump' | 'checkpoint' | 'finish' | 'shift' | 'start'
 
 const NOTE = (n: number) => 440 * Math.pow(2, (n - 69) / 12)
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
@@ -186,10 +187,32 @@ interface EngineNodes {
   shaper: WaveShaperNode
   filter: BiquadFilterNode
   presence: BiquadFilterNode
+  pipeMix: GainNode
   gain: GainNode
   wind: { gain: GainNode; filter: BiquadFilterNode }
   road: { gain: GainNode }
   skid: { gain: GainNode; filter: BiquadFilterNode }
+}
+
+/** 収録音源（Stunt Rally / VDrift 由来、public/audio/LICENSE.md 参照） */
+const SAMPLE_FILES = {
+  engineLow: 'audio/engines_engine0.ogg',
+  engineHigh: 'audio/engines_engine3.ogg',
+  squeal: 'audio/surface_tire_squeal_10.ogg',
+  wind: 'audio/vehicle_wind.ogg',
+  crash1: 'audio/crash_01.ogg',
+  crash2: 'audio/crash_03.ogg',
+  crash3: 'audio/crash_06.ogg',
+  scrap: 'audio/crash_scrap.ogg',
+  bump: 'audio/vehicle_bump_front1.ogg',
+} as const
+type SampleKey = keyof typeof SAMPLE_FILES
+
+interface SampleEngine {
+  low: { src: AudioBufferSourceNode; gain: GainNode }
+  high: { src: AudioBufferSourceNode; gain: GainNode }
+  squeal: { src: AudioBufferSourceNode; gain: GainNode }
+  wind: { src: AudioBufferSourceNode; gain: GainNode }
 }
 
 /** 擬似ギア比（最高速に対する各ギアの上限速度の割合） */
@@ -204,6 +227,10 @@ export class AudioEngine {
   private bgmDuck: GainNode | null = null
   private sfxBus: GainNode | null = null
   private engine: EngineNodes | null = null
+  private samples: Partial<Record<SampleKey, AudioBuffer>> = {}
+  private sampleEngine: SampleEngine | null = null
+  private analyser: AnalyserNode | null = null
+  private analyserBuf: Float32Array<ArrayBuffer> | null = null
   private noiseWhite: AudioBuffer | null = null
   private noisePink: AudioBuffer | null = null
 
@@ -218,7 +245,7 @@ export class AudioEngine {
   /** 回転数 [rpm]（慣性付きの状態） */
   private rpm = 900
   private lastUpdate = 0
-  volume = 0.7
+  volume = 0.5
   /** 現在の回転数 [rpm]（HUD 用） */
   get currentRpm(): number {
     return this.rpm
@@ -236,8 +263,18 @@ export class AudioEngine {
   get currentGear(): number {
     return this.gear + 1
   }
-  get engineMode(): 'worklet' | 'oscillator' | 'off' {
-    return this.engine ? (this.engine.worklet ? 'worklet' : 'oscillator') : 'off'
+  get engineMode(): 'samples' | 'worklet' | 'oscillator' | 'off' {
+    if (!this.engine) return 'off'
+    if (this.sampleEngine) return 'samples'
+    return this.engine.worklet ? 'worklet' : 'oscillator'
+  }
+  /** 直近の出力ピーク（0..1、クリップ検査用） */
+  get outputPeak(): number {
+    if (!this.analyser || !this.analyserBuf) return 0
+    this.analyser.getFloatTimeDomainData(this.analyserBuf)
+    let peak = 0
+    for (let i = 0; i < this.analyserBuf.length; i++) peak = Math.max(peak, Math.abs(this.analyserBuf[i]))
+    return peak
   }
 
   /** ユーザー操作後に呼ぶ。複数回呼んでも安全 */
@@ -255,14 +292,27 @@ export class AudioEngine {
 
     const master = ctx.createGain()
     master.gain.value = this._muted ? 0 : this.volume
+    // バスコンプ → リミッター（ブリックウォール寄り）→ アナライザ → 出力。音割れ防止のため最終段で必ず頭を抑える
     const comp = ctx.createDynamicsCompressor()
-    comp.threshold.value = -14
-    comp.knee.value = 18
-    comp.ratio.value = 3.5
-    comp.attack.value = 0.004
-    comp.release.value = 0.18
-    master.connect(comp).connect(ctx.destination)
+    comp.threshold.value = -18
+    comp.knee.value = 12
+    comp.ratio.value = 3
+    comp.attack.value = 0.006
+    comp.release.value = 0.2
+    const limiter = ctx.createDynamicsCompressor()
+    limiter.threshold.value = -4
+    limiter.knee.value = 0
+    limiter.ratio.value = 20
+    limiter.attack.value = 0.001
+    limiter.release.value = 0.08
+    const trim = ctx.createGain()
+    trim.gain.value = 0.85
+    const analyser = ctx.createAnalyser()
+    analyser.fftSize = 2048
+    master.connect(comp).connect(limiter).connect(trim).connect(analyser).connect(ctx.destination)
     this.master = master
+    this.analyser = analyser
+    this.analyserBuf = new Float32Array(new ArrayBuffer(analyser.fftSize * 4))
 
     // リバーブ / ディレイ送り
     const reverb = ctx.createConvolver()
@@ -291,18 +341,19 @@ export class AudioEngine {
     // バス
     const bgmDuck = ctx.createGain()
     const bgmBus = ctx.createGain()
-    bgmBus.gain.value = this._style === 'off' ? 0 : 0.5
+    bgmBus.gain.value = this._style === 'off' ? 0 : 0.32
     bgmBus.connect(bgmDuck).connect(master)
     this.bgmBus = bgmBus
     this.bgmDuck = bgmDuck
     const sfxBus = ctx.createGain()
-    sfxBus.gain.value = 0.9
+    sfxBus.gain.value = 0.6
     sfxBus.connect(master)
     sfxBus.connect(reverbSend)
     this.sfxBus = sfxBus
 
     this.engine = this.buildEngine(ctx, master, reverbSend)
     void this.attachWorklet(ctx)
+    void this.loadSamples(ctx)
 
     this.bgmNextTime = ctx.currentTime + 0.1
     this.bgmStep = 0
@@ -310,6 +361,58 @@ export class AudioEngine {
   }
 
   private delayNode: DelayNode | null = null
+
+  /** 収録音源を読み込み、揃ったらサンプル再生のエンジンに切り替える */
+  private async loadSamples(ctx: AudioContext): Promise<void> {
+    const engineAtStart = this.engine
+    try {
+      const entries = await Promise.all(
+        (Object.entries(SAMPLE_FILES) as [SampleKey, string][]).map(async ([key, uri]) => {
+          const res = await fetch(resolveAssetUri(uri))
+          if (!res.ok) throw new Error(`${uri}: ${res.status}`)
+          const buf = await ctx.decodeAudioData(await res.arrayBuffer())
+          return [key, buf] as const
+        }),
+      )
+      for (const [k, b] of entries) this.samples[k] = b
+      if (this.engine !== engineAtStart || !this.engine) return
+      this.buildSampleEngine(ctx, this.engine)
+    } catch (err) {
+      console.warn('[AudioEngine] sample loading failed, keeping synthesized engine', err)
+    }
+  }
+
+  private loop(ctx: AudioContext, buffer: AudioBuffer, dest: AudioNode, gain = 0): { src: AudioBufferSourceNode; gain: GainNode } {
+    const src = ctx.createBufferSource()
+    src.buffer = buffer
+    src.loop = true
+    const g = ctx.createGain()
+    g.gain.value = gain
+    src.connect(g).connect(dest)
+    src.start()
+    return { src, gain: g }
+  }
+
+  private buildSampleEngine(ctx: AudioContext, e: EngineNodes): void {
+    const s = this.samples
+    if (!s.engineLow || !s.engineHigh || !s.squeal || !s.wind || !this.master) return
+    const t = ctx.currentTime
+    // 合成エンジンを止める
+    if (e.worklet) e.worklet.parameters.get('volume')!.setTargetAtTime(0, t, 0.1)
+    for (const o of e.oscs) o.gain.gain.setTargetAtTime(0, t, 0.05)
+    e.exhaust.gain.gain.setTargetAtTime(0, t, 0.05)
+    e.wind.gain.gain.setTargetAtTime(0, t, 0.1)
+    e.skid.gain.gain.setTargetAtTime(0, t, 0.1)
+    // 排気管コムは実音には不要（金属的な共鳴が付くため）
+    e.pipeMix.gain.setTargetAtTime(0, t, 0.1)
+    this.sampleEngine = {
+      low: this.loop(ctx, s.engineLow, e.shaper, 0),
+      high: this.loop(ctx, s.engineHigh, e.shaper, 0),
+      squeal: this.loop(ctx, s.squeal, this.master, 0),
+      wind: this.loop(ctx, s.wind, this.master, 0),
+    }
+    this.sampleEngine.squeal.gain.connect(this.reverbSend!)
+  }
 
   /** AudioWorklet 版エンジンを読み込み、成功したらオシレータ版と差し替える */
   private async attachWorklet(ctx: AudioContext): Promise<void> {
@@ -334,7 +437,7 @@ export class AudioEngine {
 
   private buildEngine(ctx: AudioContext, master: GainNode, reverbSend: GainNode): EngineNodes {
     const shaper = ctx.createWaveShaper()
-    shaper.curve = softClipCurve(2.2)
+    shaper.curve = softClipCurve(1.4)
     shaper.oversample = '2x'
     const filter = ctx.createBiquadFilter()
     filter.type = 'lowpass'
@@ -456,6 +559,7 @@ export class AudioEngine {
       shaper,
       filter,
       presence,
+      pipeMix,
       gain,
       wind: { gain: windGain, filter: windFilter },
       road: { gain: roadGain },
@@ -471,7 +575,7 @@ export class AudioEngine {
   setStyle(style: BgmStyle): void {
     if (style !== this._style) this.bgmStep = 0
     this._style = style
-    if (this.bgmBus && this.ctx) this.bgmBus.gain.setTargetAtTime(style === 'off' ? 0 : 0.5, this.ctx.currentTime, 0.1)
+    if (this.bgmBus && this.ctx) this.bgmBus.gain.setTargetAtTime(style === 'off' ? 0 : 0.32, this.ctx.currentTime, 0.1)
     if (this.delayNode && style !== 'off') this.delayNode.delayTime.value = (60 / BGM_STYLES[style].bpm) * 0.75
   }
 
@@ -527,7 +631,23 @@ export class AudioEngine {
     const throttleEff = shifting ? 0 : input.throttle
     const r = (this.rpm - IDLE) / (REDLINE - IDLE)
 
-    if (e.worklet) {
+    if (this.sampleEngine) {
+      const se = this.sampleEngine
+      // 2 本のループを回転数でクロスフェード。低回転ループは 2600 rpm、高回転ループは 5200 rpm を基準ピッチとする
+      const rateLow = this.rpm / 2600
+      const rateHigh = this.rpm / 5200
+      se.low.src.playbackRate.setTargetAtTime(Math.max(0.35, Math.min(2.4, rateLow)), t, 0.03)
+      se.high.src.playbackRate.setTargetAtTime(Math.max(0.4, Math.min(1.8, rateHigh)), t, 0.03)
+      const xf = clamp01((this.rpm - 2800) / 2400) // 0 = low のみ, 1 = high のみ
+      const loadGain = 0.55 + 0.45 * load
+      se.low.gain.gain.setTargetAtTime((1 - xf) * 0.9 * loadGain, t, 0.05)
+      se.high.gain.gain.setTargetAtTime(xf * 0.8 * loadGain, t, 0.05)
+      se.wind.gain.gain.setTargetAtTime(clamp01((v - 8) / 45) ** 2 * 0.6, t, 0.1)
+      se.wind.src.playbackRate.setTargetAtTime(0.8 + clamp01(v / 50) * 0.5, t, 0.2)
+      const skidS = input.wheelsOnGround > 0 ? clamp01(input.skid) : 0
+      se.squeal.gain.gain.setTargetAtTime(skidS * 0.5, t, 0.04)
+      se.squeal.src.playbackRate.setTargetAtTime(0.9 + skidS * 0.25, t, 0.1)
+    } else if (e.worklet) {
       const p = e.worklet.parameters
       p.get('rpm')!.setTargetAtTime(this.rpm, t, 0.03)
       p.get('throttle')!.setTargetAtTime(throttleEff, t, 0.05)
@@ -541,15 +661,17 @@ export class AudioEngine {
     // トーン: 負荷で明るく・前に出る。惰性は籠る
     e.filter.frequency.setTargetAtTime(380 + r * 2200 + load * 1800, t, 0.06)
     e.presence.gain.setTargetAtTime(load * 7 - 2, t, 0.08)
-    e.gain.gain.setTargetAtTime((0.16 + r * 0.12) * (0.6 + 0.4 * load) * (shifting ? 0.7 : 1), t, 0.05)
+    e.gain.gain.setTargetAtTime((0.14 + r * 0.1) * (0.6 + 0.4 * load) * (shifting ? 0.7 : 1), t, 0.05)
 
-    // 風・路面
-    e.wind.gain.gain.setTargetAtTime(clamp01((v - 8) / 45) ** 2 * 0.5, t, 0.1)
-    e.wind.filter.frequency.setTargetAtTime(400 + v * 40, t, 0.1)
-    e.road.gain.gain.setTargetAtTime(input.wheelsOnGround > 0 ? clamp01(v / 30) * 0.35 : 0, t, 0.1)
-    const skid = input.wheelsOnGround > 0 ? clamp01(input.skid) : 0
-    e.skid.gain.gain.setTargetAtTime(skid * 0.22, t, 0.05)
-    e.skid.filter.frequency.setTargetAtTime(1700 + skid * 900, t, 0.05)
+    // 風・路面（収録音源が無いときはノイズ合成）
+    e.road.gain.gain.setTargetAtTime(input.wheelsOnGround > 0 ? clamp01(v / 30) * 0.28 : 0, t, 0.1)
+    if (!this.sampleEngine) {
+      e.wind.gain.gain.setTargetAtTime(clamp01((v - 8) / 45) ** 2 * 0.4, t, 0.1)
+      e.wind.filter.frequency.setTargetAtTime(400 + v * 40, t, 0.1)
+      const skid = input.wheelsOnGround > 0 ? clamp01(input.skid) : 0
+      e.skid.gain.gain.setTargetAtTime(skid * 0.18, t, 0.05)
+      e.skid.filter.frequency.setTargetAtTime(1700 + skid * 900, t, 0.05)
+    }
   }
 
   // ---------------------------------------------------------------- SE
@@ -559,8 +681,29 @@ export class AudioEngine {
     const bus = this.sfxBus
     if (!ctx || !bus) return
     const t = ctx.currentTime
+    const playSample = (key: SampleKey, gain: number, rate = 1) => {
+      const buf = this.samples[key]
+      if (!buf) return false
+      const src = ctx.createBufferSource()
+      src.buffer = buf
+      src.playbackRate.value = rate
+      const g = ctx.createGain()
+      g.gain.value = gain
+      src.connect(g).connect(bus)
+      src.start(t)
+      return true
+    }
     switch (name) {
+      case 'bump': {
+        if (!playSample('bump', 0.7, 0.9 + Math.random() * 0.2)) this.playSfx('collision')
+        break
+      }
       case 'collision': {
+        const keys: SampleKey[] = ['crash1', 'crash2', 'crash3']
+        if (playSample(keys[Math.floor(Math.random() * keys.length)], 0.9, 0.95 + Math.random() * 0.1)) {
+          if (Math.random() < 0.35) playSample('scrap', 0.35, 1)
+          break
+        }
         // 低域のドスン + 金属的なガシャ
         const o = ctx.createOscillator()
         o.frequency.setValueAtTime(140, t)

@@ -16,11 +16,12 @@ const bodyWithoutScripts = body.replace(/<script[^>]*>[\s\S]*?<\/script>/g, '').
 // U+FFFD（fast-xml-parser の文字クラスに含まれる）はそのままだと公開時に弾かれるので JS エスケープにする
 const escapeReplacement = (s) => s.replace(/\uFFFD/g, '\\uFFFD')
 // public/models と public/samples を data: URI として埋め込む（Artifact は GLB/PLY を配信できないため）
-const MIME = { glb: 'model/gltf-binary', ply: 'application/octet-stream', gml: 'application/xml', xml: 'application/xml', las: 'application/octet-stream' }
+const MIME = { glb: 'model/gltf-binary', ply: 'application/octet-stream', gml: 'application/xml', xml: 'application/xml', las: 'application/octet-stream', ogg: 'audio/ogg', mp3: 'audio/mpeg', wav: 'audio/wav' }
 const assets = {}
-for (const dir of ['models', 'samples']) {
+for (const dir of ['models', 'samples', 'audio']) {
   for (const name of readdirSync(join('public', dir))) {
     const ext = name.split('.').pop()
+    if (ext === 'md') continue
     const data = readFileSync(join('public', dir, name))
     assets[`${dir}/${name}`] = `data:${MIME[ext] ?? 'application/octet-stream'};base64,${data.toString('base64')}`
   }
