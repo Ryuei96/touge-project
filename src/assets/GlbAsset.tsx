@@ -6,6 +6,7 @@ import { RigidBody } from '@react-three/rapier'
 import { useGLTF } from '@react-three/drei'
 import { Component, Suspense, useMemo, type ReactNode } from 'react'
 import type { PlacedAsset } from '../course/types'
+import { resolveAssetUri } from './assetUri'
 
 class AssetErrorBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
   state = { failed: false }
@@ -21,7 +22,7 @@ class AssetErrorBoundary extends Component<{ fallback: ReactNode; children: Reac
 }
 
 function GlbScene({ uri }: { uri: string }) {
-  const gltf = useGLTF(uri)
+  const gltf = useGLTF(resolveAssetUri(uri))
   const scene = useMemo(() => gltf.scene.clone(true), [gltf.scene])
   return <primitive object={scene} />
 }

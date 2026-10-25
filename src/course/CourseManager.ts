@@ -4,6 +4,7 @@
  * - geospatial: GeoDataImporter が生成した CourseDefinition（中心線は既にゲーム座標）
  * - bim: 未実装（GLB/FBX の道路・橋梁モデルを読み込む将来機能）
  */
+import { resolveAssetUri } from '../assets/assetUri'
 import { buildBimCourse, buildCourseFromCenterline, type BinaryLoader } from './buildCourse'
 import type { BuiltCourse, CourseDefinition, CourseSource } from './types'
 
@@ -75,7 +76,7 @@ export class CourseManager {
 
 /** ブラウザ用: public/ 配下の相対 URI を fetch する */
 export const fetchBinary: BinaryLoader = async (uri) => {
-  const res = await fetch(uri)
+  const res = await fetch(resolveAssetUri(uri))
   if (!res.ok) throw new Error(`failed to load ${uri}: ${res.status}`)
   return res.arrayBuffer()
 }

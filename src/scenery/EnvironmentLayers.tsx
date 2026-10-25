@@ -6,6 +6,7 @@ import { RigidBody, TrimeshCollider } from '@react-three/rapier'
 import { useEffect, useMemo, useState } from 'react'
 import { BufferAttribute, BufferGeometry } from 'three'
 import type { BuiltCourse, CityGmlLayerRef, CourseLayer, MeshData, PointCloudLayerRef } from '../course/types'
+import { resolveAssetUri } from '../assets/assetUri'
 import { CoordinateTransformer } from '../geo/CoordinateTransformer'
 import { importCityGml } from '../geo/CityGmlImporter'
 import { parsePointCloud, toGamePointCloud, type PointCloud } from '../geo/PointCloudImporter'
@@ -41,7 +42,7 @@ function toGeometry(mesh: MeshData): BufferGeometry {
 
 function PointCloudLayer({ layer, course }: { layer: PointCloudLayerRef; course: BuiltCourse }) {
   const { data } = useLayerData<PointCloud>(async () => {
-    const res = await fetch(layer.uri)
+    const res = await fetch(resolveAssetUri(layer.uri))
     if (!res.ok) throw new Error(`failed to load ${layer.uri}: ${res.status}`)
     const raw = parsePointCloud(layer.uri, await res.arrayBuffer(), { maxPoints: layer.maxPoints })
     const transformer = layer.coordinates === 'projected' ? new CoordinateTransformer(course.definition.origin) : undefined
@@ -66,7 +67,7 @@ function PointCloudLayer({ layer, course }: { layer: PointCloudLayerRef; course:
 
 function CityGmlLayer({ layer, course }: { layer: CityGmlLayerRef; course: BuiltCourse }) {
   const { data } = useLayerData(async () => {
-    const res = await fetch(layer.uri)
+    const res = await fetch(resolveAssetUri(layer.uri))
     if (!res.ok) throw new Error(`failed to load ${layer.uri}: ${res.status}`)
     const origin = course.definition.origin
     const transformer = origin.sourcePosition && 'latitude' in origin.sourcePosition ? new CoordinateTransformer(origin) : undefined
