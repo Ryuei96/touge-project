@@ -131,9 +131,11 @@ export function createRoadFollowingHeightField(samples: RoadSample[], options: R
     const edge = sw[index] / 2 + shoulder
     const roadY = y - 0.15
     if (distance <= edge) return sy[index] - 0.15
-    const t = smoothstep(edge, edge + blend, distance)
     // 山肌が道路基準から極端に離れないよう差分を制限（切土・盛土の高さ上限）
     const diff = clamp(mountain(x, z) - roadY, -28, 18)
+    // 切土（山側）は急な法面、盛土（谷側）は緩い斜面にする
+    const blendHere = diff > 0 ? Math.min(blend, 16) : blend
+    const t = smoothstep(edge, edge + blendHere, distance)
     const nearRoad = sy[index] - 0.15
     // 路肩直外では最近傍の路面高さ、遠方では加重平均 + 山肌へ
     const baseY = nearRoad + (roadY - nearRoad) * smoothstep(edge, edge + blend * 0.6, distance)
@@ -147,6 +149,7 @@ export function createRoadFollowingHeightField(samples: RoadSample[], options: R
     maxZ: maxZ + margin,
     getHeight,
     roadInfo,
+    roadWidthAt: (index: number) => sw[Math.max(0, Math.min(n - 1, index))],
   }
 }
 
@@ -157,6 +160,7 @@ export interface TerrainMeshOptions {
 /** HeightField からグリッドメッシュを生成（頂点色: 勾配と標高） */
 export function generateTerrainMesh(field: HeightField, options: TerrainMeshOptions = {}): MeshData {
   const res = Math.max(2, options.resolution ?? 128)
+  const roadHalf = (index: number) => (field.roadWidthAt ? field.roadWidthAt(index) / 2 : 3.5)
   const cols = res + 1
   const rows = res + 1
   const positions = new Float32Array(cols * rows * 3)
@@ -193,15 +197,36 @@ export function generateTerrainMesh(field: HeightField, options: TerrainMeshOpti
       nx /= l; ny /= l; nz /= l
       const i = (r * cols + c) * 3
       normals[i] = nx; normals[i + 1] = ny; normals[i + 2] = nz
-      // 色: 平坦=草地, 急斜面=岩, 高所=やや明るく
+      // 色: 草地（ノイズで 2 色を混ぜる）→ 土（やや急）→ 岩（急斜面）。路肩は砂利、高所は少し明るく乾いた色
       const slope = 1 - ny
+      const x = positions[i]
+      const z = positions[i + 2]
       const h = (positions[i + 1] - minY) / Math.max(maxY - minY, 1)
-      const grass = [0.27 + h * 0.1, 0.46 + h * 0.08, 0.2]
-      const rock = [0.42, 0.4, 0.36]
-      const t = smoothstep(0.18, 0.45, slope)
-      colors[i] = grass[0] + (rock[0] - grass[0]) * t
-      colors[i + 1] = grass[1] + (rock[1] - grass[1]) * t
-      colors[i + 2] = grass[2] + (rock[2] - grass[2]) * t
+      const n1 = fbm2(x / 23, z / 23, 31, 3)
+      const n2 = fbm2(x / 7, z / 7, 77, 2)
+      const grassA = [0.24, 0.41, 0.17]
+      const grassB = [0.36, 0.5, 0.2]
+      const dry = [0.5, 0.48, 0.26]
+      const dirt = [0.42, 0.33, 0.22]
+      const rock = [0.46, 0.44, 0.41]
+      const gravel = [0.52, 0.5, 0.45]
+      let cr = grassA[0] + (grassB[0] - grassA[0]) * n1
+      let cg = grassA[1] + (grassB[1] - grassA[1]) * n1
+      let cb = grassA[2] + (grassB[2] - grassA[2]) * n1
+      const dryT = smoothstep(0.55, 0.95, h) * 0.5 * n2
+      cr += (dry[0] - cr) * dryT; cg += (dry[1] - cg) * dryT; cb += (dry[2] - cb) * dryT
+      const dirtT = smoothstep(0.2, 0.38, slope + n2 * 0.08)
+      cr += (dirt[0] - cr) * dirtT; cg += (dirt[1] - cg) * dirtT; cb += (dirt[2] - cb) * dirtT
+      const rockT = smoothstep(0.42, 0.62, slope + n2 * 0.06)
+      cr += (rock[0] - cr) * rockT; cg += (rock[1] - cg) * rockT; cb += (rock[2] - cb) * rockT
+      const info = field.roadInfo(x, z)
+      const shoulderT = 1 - smoothstep(roadHalf(info.index) + 0.3, roadHalf(info.index) + 3.2, info.distance)
+      cr += (gravel[0] - cr) * shoulderT; cg += (gravel[1] - cg) * shoulderT; cb += (gravel[2] - cb) * shoulderT
+      // 微小な明暗のばらつき
+      const v = 0.92 + n2 * 0.16
+      colors[i] = cr * v
+      colors[i + 1] = cg * v
+      colors[i + 2] = cb * v
     }
   }
   let k = 0

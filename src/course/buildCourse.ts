@@ -5,13 +5,13 @@
  */
 import { headingFromDirection, type Vec3 } from '../core/vec3'
 import { buildCourseCollision } from '../road/CollisionBuilder'
-import { generateGuardrailMesh, generateRoadMesh } from '../road/RoadMeshGenerator'
+import { generateGuardrailRuns, generateRoadMesh, generateShoulderMesh } from '../road/RoadMeshGenerator'
 import { sampleCenterline, sampleIndexAtDistance, type RoadSample } from '../road/spline'
 import { createRoadFollowingHeightField, generateTerrainMesh } from '../road/TerrainMeshGenerator'
 import { generateScenery } from '../scenery/SceneryGenerator'
 import { parseGlb } from '../bim/GlbReader'
 import { importBimModel } from '../bim/BimModelImporter'
-import type { BuiltCourse, CourseDefinition, Marker, Pose } from './types'
+import type { BuiltCourse, CourseDefinition, HeightField, Marker, Pose } from './types'
 
 function buildMarkers(def: CourseDefinition, samples: RoadSample[]): BuiltCourse['markers'] {
   const first = samples[0]
@@ -59,16 +59,25 @@ export function buildCourseFromCenterline(def: CourseDefinition): BuiltCourse {
     closed: def.closed ?? false,
   })
   const road = def.meshes?.road ?? generateRoadMesh(samples, { lift: 0 })
-  const guardrails = def.guardrails === false ? [] : [generateGuardrailMesh(samples, -1), generateGuardrailMesh(samples, 1)]
 
   const terrainOpts = def.terrain ?? {}
   const terrainEnabled = terrainOpts.enabled ?? true
   const heightField = terrainEnabled ? createRoadFollowingHeightField(samples, terrainOpts) : undefined
   const terrain = def.meshes?.terrain ?? (heightField ? generateTerrainMesh(heightField, { resolution: terrainOpts.resolution ?? 128 }) : undefined)
 
+  // ガードレール: 谷側（路面より地形が 1.6 m 以上低い側）だけに付ける。地形が無いコースは両側に付ける
+  const mask = guardrailMask(samples, heightField, def.guardrails)
+  const left = generateGuardrailRuns(samples, -1, mask.left)
+  const right = generateGuardrailRuns(samples, 1, mask.right)
+  const guardrails = [...left.meshes, ...right.meshes]
+  // 描画用: W ビーム（0.55〜0.9 m の帯）。衝突は guardrails（見えない壁）
+  const beamOpts = { bottom: 0.55, height: 0.35 }
+  const guardrailBeams = [...generateGuardrailRuns(samples, -1, mask.left, beamOpts).meshes, ...generateGuardrailRuns(samples, 1, mask.right, beamOpts).meshes]
+  const shoulders = heightField ? [generateShoulderMesh(samples, -1), generateShoulderMesh(samples, 1)] : []
+
   const collision = def.collision ?? buildCourseCollision({ road, terrain, guardrails })
   const markers = buildMarkers(def, samples)
-  const scenery = generateScenery(heightField, samples, { seed: def.scenery?.seed, treeCount: def.scenery?.treeCount })
+  const scenery = generateScenery(heightField, samples, { seed: def.scenery?.seed, treeCount: def.scenery?.treeCount, guardrailMask: mask })
 
   let minY = Infinity, maxY = -Infinity
   for (const s of samples) {
@@ -85,13 +94,43 @@ export function buildCourseFromCenterline(def: CourseDefinition): BuiltCourse {
     definition: def,
     samples,
     length: samples[samples.length - 1].distance,
-    meshes: { road, terrain, guardrails },
+    meshes: { road, terrain, guardrails, guardrailBeams, shoulders },
     collision,
     heightField,
     markers,
     scenery,
+    guardrailMask: mask,
     bounds: { minY, maxY },
   }
+}
+
+/** ガードレールを付ける区間（サンプルごと）。谷側で路面より地形が低い所 */
+export function guardrailMask(samples: RoadSample[], field: HeightField | undefined, enabled: boolean | undefined): { left: boolean[]; right: boolean[] } {
+  const n = samples.length
+  if (enabled === false) return { left: new Array(n).fill(false), right: new Array(n).fill(false) }
+  if (!field) return { left: new Array(n).fill(true), right: new Array(n).fill(true) }
+  const left: boolean[] = new Array(n)
+  const right: boolean[] = new Array(n)
+  // 路肩から 15 m ほど外側（盛土の斜面）で 1.5 m 以上下がっていれば谷側とみなす
+  const probe = 20
+  for (let i = 0; i < n; i++) {
+    const s = samples[i]
+    const hl = field.getHeight(s.position.x - s.right.x * probe, s.position.z - s.right.z * probe)
+    const hr = field.getHeight(s.position.x + s.right.x * probe, s.position.z + s.right.z * probe)
+    left[i] = s.position.y - hl > 1.5
+    right[i] = s.position.y - hr > 1.5
+  }
+  // 短い途切れ（4 サンプル未満）は繋いで連続性を出す
+  for (const arr of [left, right]) {
+    for (let i = 1; i < n - 1; i++) {
+      if (!arr[i] && arr[i - 1]) {
+        let j = i
+        while (j < n && !arr[j] && j - i < 4) j++
+        if (j < n && arr[j]) for (let k = i; k < j; k++) arr[k] = true
+      }
+    }
+  }
+  return { left, right }
 }
 
 export type BinaryLoader = (uri: string) => Promise<ArrayBuffer>
@@ -119,15 +158,19 @@ export async function buildBimCourse(def: CourseDefinition, loadBinary: BinaryLo
   const collision = [...imported.collision, ...(terrain ? buildCourseCollision({ road: imported.drivable, terrain, guardrails: [] }).filter((c) => c.label === 'terrain') : [])]
   const markers = buildMarkers(def, samples)
   const scenery = generateScenery(heightField, samples, { seed: def.scenery?.seed, treeCount: def.scenery?.treeCount ?? 0 })
+  scenery.delineators = []
+  scenery.poles = []
+  scenery.signs = []
   return {
     definition: def,
     samples,
     length: samples[samples.length - 1].distance,
-    meshes: { road: imported.drivable, terrain, guardrails: imported.obstacles ? [imported.obstacles] : [] },
+    meshes: { road: imported.drivable, terrain, guardrails: imported.obstacles ? [imported.obstacles] : [], guardrailBeams: [], shoulders: [] },
     collision,
     heightField,
     markers,
     scenery,
+    guardrailMask: { left: [], right: [] },
     bounds: { minY: imported.bounds.min[1], maxY: imported.bounds.max[1] },
   }
 }

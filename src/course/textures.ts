@@ -103,3 +103,97 @@ export function createGrassDetailTexture(): CanvasTexture {
   tex.anisotropy = 8
   return tex
 }
+
+/** 砂利・土の路肩 */
+export function createGravelTexture(): CanvasTexture {
+  const size = 256
+  const [canvas, ctx] = makeCanvas(size)
+  ctx.fillStyle = '#8a8072'
+  ctx.fillRect(0, 0, size, size)
+  for (let k = 0; k < 2600; k++) {
+    const g = 100 + rnd() * 90
+    ctx.fillStyle = `rgb(${g + 10},${g},${g - 14})`
+    const r = 1 + rnd() * 2.2
+    ctx.beginPath()
+    ctx.arc(rnd() * size, rnd() * size, r, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  const tex = new CanvasTexture(canvas)
+  tex.wrapS = RepeatWrapping
+  tex.wrapT = RepeatWrapping
+  tex.colorSpace = SRGBColorSpace
+  return tex
+}
+
+export type SignTextureKind = 'curve-left' | 'curve-right' | 'speed-40' | 'chevron-left' | 'chevron-right'
+
+/** 道路標識（日本の警戒標識・規制標識・シェブロン風） */
+export function createSignTexture(kind: SignTextureKind): CanvasTexture {
+  const size = 256
+  const [canvas, ctx] = makeCanvas(size)
+  ctx.clearRect(0, 0, size, size)
+  if (kind === 'curve-left' || kind === 'curve-right') {
+    // 黄色のひし形 + 黒い矢印
+    ctx.save()
+    ctx.translate(size / 2, size / 2)
+    ctx.rotate(Math.PI / 4)
+    ctx.fillStyle = '#f2c021'
+    ctx.fillRect(-84, -84, 168, 168)
+    ctx.lineWidth = 8
+    ctx.strokeStyle = '#111'
+    ctx.strokeRect(-78, -78, 156, 156)
+    ctx.restore()
+    ctx.strokeStyle = '#111'
+    ctx.lineWidth = 16
+    ctx.lineCap = 'round'
+    ctx.beginPath()
+    const dir = kind === 'curve-left' ? -1 : 1
+    ctx.moveTo(size / 2 - dir * 10, size / 2 + 60)
+    ctx.quadraticCurveTo(size / 2 - dir * 10, size / 2 - 20, size / 2 + dir * 40, size / 2 - 40)
+    ctx.stroke()
+    ctx.fillStyle = '#111'
+    ctx.beginPath()
+    ctx.moveTo(size / 2 + dir * 62, size / 2 - 52)
+    ctx.lineTo(size / 2 + dir * 18, size / 2 - 62)
+    ctx.lineTo(size / 2 + dir * 40, size / 2 - 20)
+    ctx.closePath()
+    ctx.fill()
+  } else if (kind === 'speed-40') {
+    ctx.fillStyle = '#fff'
+    ctx.beginPath()
+    ctx.arc(size / 2, size / 2, 110, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.lineWidth = 20
+    ctx.strokeStyle = '#d02424'
+    ctx.beginPath()
+    ctx.arc(size / 2, size / 2, 98, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.fillStyle = '#1b3e9e'
+    ctx.font = 'bold 110px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('40', size / 2, size / 2 + 6)
+  } else {
+    // シェブロン: 黒地に黄色の山形
+    ctx.fillStyle = '#111'
+    ctx.fillRect(0, 48, size, 160)
+    ctx.fillStyle = '#f2c021'
+    const dir = kind === 'chevron-left' ? -1 : 1
+    for (let k = -1; k <= 1; k++) {
+      const cx = size / 2 + k * 70
+      ctx.beginPath()
+      ctx.moveTo(cx - dir * 26, 64)
+      ctx.lineTo(cx + dir * 14, 128)
+      ctx.lineTo(cx - dir * 26, 192)
+      ctx.lineTo(cx - dir * 4, 192)
+      ctx.lineTo(cx + dir * 36, 128)
+      ctx.lineTo(cx - dir * 4, 64)
+      ctx.closePath()
+      ctx.fill()
+    }
+  }
+  const tex = new CanvasTexture(canvas)
+  tex.colorSpace = SRGBColorSpace
+  tex.anisotropy = 8
+  return tex
+}

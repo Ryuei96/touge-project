@@ -6,7 +6,9 @@ import { RigidBody, TrimeshCollider } from '@react-three/rapier'
 import { useEffect, useMemo } from 'react'
 import { BufferAttribute, BufferGeometry, DoubleSide, InstancedMesh, Matrix4, Object3D } from 'three'
 import type { BuiltCourse, CollisionShape, MeshData, PlacedAsset } from './types'
-import { createGrassDetailTexture, createRoadTexture } from './textures'
+import { createGrassDetailTexture, createGravelTexture, createRoadTexture } from './textures'
+import { SceneryProps } from '../scenery/Props'
+import { Backdrop } from '../scenery/Backdrop'
 import { useGameStore } from '../app/gameStore'
 import { useGarageStore } from '../app/garageStore'
 import { BimModelVisual, GlbAsset } from '../assets/GlbAsset'
@@ -57,7 +59,23 @@ function TerrainMesh({ mesh }: { mesh: MeshData }) {
   )
 }
 
-/** ガードレールの支柱（一定間隔） */
+function ShoulderMesh({ mesh }: { mesh: MeshData }) {
+  const geometry = useGeometry(mesh)
+  const texture = useMemo(() => {
+    const t = createGravelTexture()
+    t.repeat.set(1, 1)
+    return t
+  }, [])
+  useEffect(() => () => texture.dispose(), [texture])
+  if (!geometry) return null
+  return (
+    <mesh geometry={geometry} receiveShadow>
+      <meshStandardMaterial map={texture} roughness={1} metalness={0} />
+    </mesh>
+  )
+}
+
+/** ガードレールの支柱（ガードレールのある区間だけ、一定間隔） */
 function GuardrailPosts({ course }: { course: BuiltCourse }) {
   const items = useMemo(() => {
     const out: Matrix4[] = []
@@ -69,6 +87,7 @@ function GuardrailPosts({ course }: { course: BuiltCourse }) {
     for (let i = 0; i < samples.length; i += every) {
       const s = samples[i]
       for (const side of [-1, 1]) {
+        if (!(side < 0 ? course.guardrailMask.left[i] : course.guardrailMask.right[i])) continue
         const d = s.width / 2 + 0.6
         dummy.position.set(s.position.x + s.right.x * d * side, s.position.y + 0.15, s.position.z + s.right.z * d * side)
         dummy.rotation.set(0, s.heading, 0)
@@ -97,7 +116,7 @@ function GuardrailMesh({ mesh }: { mesh: MeshData }) {
   if (!geometry) return null
   return (
     <mesh geometry={geometry}>
-      <meshStandardMaterial color="#d7dde2" side={DoubleSide} roughness={0.35} metalness={0.8} />
+      <meshStandardMaterial color="#c9cfd4" side={DoubleSide} roughness={0.4} metalness={0.75} />
     </mesh>
   )
 }
@@ -111,53 +130,6 @@ function CollisionBodies({ shapes }: { shapes: CollisionShape[] }) {
         ) : null,
       )}
     </RigidBody>
-  )
-}
-
-function Trees({ course }: { course: BuiltCourse }) {
-  const trees = course.scenery.trees
-  const count = trees.length
-  const matrices = useMemo(() => {
-    const dummy = new Object3D()
-    const trunk: Matrix4[] = []
-    const crown: Matrix4[] = []
-    const crownTop: Matrix4[] = []
-    for (const t of trees) {
-      dummy.position.set(t.position.x, t.position.y + 1.4 * t.scale, t.position.z)
-      dummy.rotation.set(0, t.rotationY, 0)
-      dummy.scale.setScalar(t.scale)
-      dummy.updateMatrix()
-      trunk.push(dummy.matrix.clone())
-      dummy.position.set(t.position.x, t.position.y + 4.2 * t.scale, t.position.z)
-      dummy.updateMatrix()
-      crown.push(dummy.matrix.clone())
-      dummy.position.set(t.position.x, t.position.y + 7.0 * t.scale, t.position.z)
-      dummy.updateMatrix()
-      crownTop.push(dummy.matrix.clone())
-    }
-    return { trunk, crown, crownTop }
-  }, [trees])
-  const setMatrices = (mesh: InstancedMesh | null, list: Matrix4[]) => {
-    if (!mesh) return
-    list.forEach((m, i) => mesh.setMatrixAt(i, m))
-    mesh.instanceMatrix.needsUpdate = true
-  }
-  if (count === 0) return null
-  return (
-    <group>
-      <instancedMesh ref={(m) => setMatrices(m, matrices.trunk)} args={[undefined, undefined, count]} frustumCulled={false} castShadow>
-        <cylinderGeometry args={[0.22, 0.38, 3.2, 7]} />
-        <meshStandardMaterial color="#4f3b2a" roughness={1} />
-      </instancedMesh>
-      <instancedMesh ref={(m) => setMatrices(m, matrices.crown)} args={[undefined, undefined, count]} frustumCulled={false} castShadow>
-        <coneGeometry args={[2.4, 5.5, 8]} />
-        <meshStandardMaterial color="#2c6132" roughness={0.95} />
-      </instancedMesh>
-      <instancedMesh ref={(m) => setMatrices(m, matrices.crownTop)} args={[undefined, undefined, count]} frustumCulled={false} castShadow>
-        <coneGeometry args={[1.6, 4.5, 8]} />
-        <meshStandardMaterial color="#3a7a3c" roughness={0.95} />
-      </instancedMesh>
-    </group>
   )
 }
 
@@ -260,15 +232,19 @@ export function CourseScene({ course }: { course: BuiltCourse }) {
       ) : (
         <>
           <RoadMesh mesh={course.meshes.road} />
-          {course.meshes.guardrails.map((g, i) => (
+          {course.meshes.guardrailBeams.map((g, i) => (
             <GuardrailMesh key={i} mesh={g} />
           ))}
           {course.meshes.guardrails.length > 0 && <GuardrailPosts course={course} />}
+          {course.meshes.shoulders.map((m, i) => (
+            <ShoulderMesh key={i} mesh={m} />
+          ))}
         </>
       )}
       {course.meshes.terrain && <TerrainMesh mesh={course.meshes.terrain} />}
       <CollisionBodies shapes={course.collision} />
-      <Trees course={course} />
+      <SceneryProps course={course} />
+      {course.heightField && <Backdrop course={course} />}
       <Markers course={course} />
       <Assets assets={def.assets} />
       <PlacedAssets courseId={def.id} />

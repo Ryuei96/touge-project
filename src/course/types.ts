@@ -201,10 +201,34 @@ export interface SceneryInstance {
   position: Vec3
   scale: number
   rotationY: number
+  /** 色のばらつき（0..1） */
+  tint?: number
+}
+
+export type TreeSpecies = 'conifer' | 'broadleaf'
+
+export interface TreeInstance extends SceneryInstance {
+  species: TreeSpecies
+}
+
+export type SignKind = 'curve-left' | 'curve-right' | 'speed-40' | 'chevron-left' | 'chevron-right'
+
+export interface SignInstance {
+  position: Vec3
+  /** 板の向き（ヨー） */
+  heading: number
+  kind: SignKind
 }
 
 export interface SceneryInstances {
-  trees: SceneryInstance[]
+  trees: TreeInstance[]
+  rocks: SceneryInstance[]
+  bushes: SceneryInstance[]
+  /** 視線誘導標（白い反射ポール） */
+  delineators: SceneryInstance[]
+  /** 電柱（heading = 道路方向） */
+  poles: SceneryInstance[]
+  signs: SignInstance[]
 }
 
 export interface HeightField {
@@ -215,6 +239,8 @@ export interface HeightField {
   getHeight(x: number, z: number): number
   /** 道路中心線までの水平距離 [m] と最近傍サンプルのインデックス */
   roadInfo(x: number, z: number): { distance: number; index: number }
+  /** サンプル index の幅員 [m] */
+  roadWidthAt?(index: number): number
 }
 
 /** CourseManager が返す、走行可能な状態に構築されたコース */
@@ -223,11 +249,13 @@ export interface BuiltCourse {
   samples: RoadSample[]
   /** 総延長 [m] */
   length: number
-  meshes: { road: MeshData; terrain?: MeshData; guardrails: MeshData[] }
+  meshes: { road: MeshData; terrain?: MeshData; guardrails: MeshData[]; guardrailBeams: MeshData[]; shoulders: MeshData[] }
   collision: CollisionShape[]
   heightField?: HeightField
   markers: { start: Pose; goal: Marker; checkpoints: Marker[] }
   scenery: SceneryInstances
+  /** ガードレールのある区間（サンプルごと） */
+  guardrailMask: { left: boolean[]; right: boolean[] }
   /** 標高の範囲 */
   bounds: { minY: number; maxY: number }
 }

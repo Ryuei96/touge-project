@@ -12,9 +12,16 @@ describe('CourseManager', () => {
     const course = await manager.load('touge01')
     expect(course.length).toBeGreaterThan(1400)
     expect(course.samples.length).toBe(Math.floor(course.length / 2) + 1)
-    expect(course.meshes.guardrails.length).toBe(2)
+    // ガードレールは谷側の区間だけ（両側連続ではない）
+    expect(course.meshes.guardrails.length).toBeGreaterThan(0)
+    const railed = course.guardrailMask.left.filter(Boolean).length + course.guardrailMask.right.filter(Boolean).length
+    expect(railed).toBeGreaterThan(0)
+    expect(railed).toBeLessThan(course.samples.length * 2 * 0.8)
+    expect(course.meshes.shoulders.length).toBe(2)
     expect(course.meshes.terrain).toBeDefined()
-    expect(course.collision.map((c) => c.label)).toEqual(['road', 'terrain', 'guardrail-0', 'guardrail-1'])
+    const labels = course.collision.map((c) => c.label)
+    expect(labels.slice(0, 2)).toEqual(['road', 'terrain'])
+    expect(labels.filter((l) => l.startsWith('guardrail-')).length).toBe(course.meshes.guardrails.length)
     // マーカー
     expect(course.markers.checkpoints.length).toBeGreaterThanOrEqual(4)
     const ds = course.markers.checkpoints.map((c) => c.distance ?? 0)
@@ -23,6 +30,11 @@ describe('CourseManager', () => {
     expect(course.markers.start.position.y).toBeGreaterThan(course.samples[0].position.y)
     // 景観
     expect(course.scenery.trees.length).toBeGreaterThan(100)
+    expect(course.scenery.trees.some((t) => t.species === 'broadleaf')).toBe(true)
+    expect(course.scenery.rocks.length).toBeGreaterThan(10)
+    expect(course.scenery.delineators.length).toBeGreaterThan(10)
+    expect(course.scenery.signs.some((sg) => sg.kind.startsWith('chevron'))).toBe(true)
+    expect(course.scenery.signs.some((sg) => sg.kind === 'speed-40')).toBe(true)
     // 同一 Promise をキャッシュ
     expect(manager.load('touge01')).toBe(manager.load('touge01'))
   })

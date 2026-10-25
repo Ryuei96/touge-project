@@ -59,13 +59,15 @@ export interface GuardrailOptions {
   height?: number
   /** 下端を路面より下げる量 [m] */
   sink?: number
+  /** 下端の高さ [m]（ビーム描画用。指定すると sink を無視して bottom..bottom+height の帯になる） */
+  bottom?: number
 }
 
 /** 片側のガードレール（薄い壁）。side = -1 左, +1 右 */
 export function generateGuardrailMesh(samples: RoadSample[], side: -1 | 1, options: GuardrailOptions = {}): MeshData {
   const offset = options.offset ?? 0.6
   const height = options.height ?? 0.9
-  const sink = options.sink ?? 0.4
+  const sink = options.bottom !== undefined ? -options.bottom : (options.sink ?? 0.4)
   const n = samples.length
   const positions = new Float32Array(n * 2 * 3)
   const normals = new Float32Array(n * 2 * 3)
@@ -112,4 +114,68 @@ export function meshBounds(mesh: MeshData): { min: [number, number, number]; max
     }
   }
   return { min, max }
+}
+
+/**
+ * mask[i] が true の連続区間ごとにガードレールを生成する。短い区間（minRun 未満のサンプル数）は捨てる。
+ */
+export function generateGuardrailRuns(samples: RoadSample[], side: -1 | 1, mask: boolean[], options: GuardrailOptions & { minRun?: number } = {}): { meshes: MeshData[]; runs: [number, number][] } {
+  const minRun = options.minRun ?? 6
+  const meshes: MeshData[] = []
+  const runs: [number, number][] = []
+  let start = -1
+  const flush = (end: number) => {
+    if (start >= 0 && end - start + 1 >= minRun) {
+      meshes.push(generateGuardrailMesh(samples.slice(start, end + 1), side, options))
+      runs.push([start, end])
+    }
+    start = -1
+  }
+  for (let i = 0; i < samples.length; i++) {
+    if (mask[i]) {
+      if (start < 0) start = i
+    } else flush(i - 1)
+  }
+  flush(samples.length - 1)
+  return { meshes, runs }
+}
+
+/** 路肩（砂利・土の帯）。路面の外側に width [m] の帯を少し下げて敷く */
+export function generateShoulderMesh(samples: RoadSample[], side: -1 | 1, width = 1.2, drop = 0.06): MeshData {
+  const n = samples.length
+  const positions = new Float32Array(n * 2 * 3)
+  const normals = new Float32Array(n * 2 * 3)
+  const uvs = new Float32Array(n * 2 * 2)
+  const indices = new Uint32Array((n - 1) * 6)
+  for (let i = 0; i < n; i++) {
+    const s = samples[i]
+    const d0 = s.width / 2 - 0.02
+    const d1 = s.width / 2 + width
+    const o = i * 6
+    positions[o] = s.position.x + s.right.x * d0 * side
+    positions[o + 1] = s.position.y - 0.01
+    positions[o + 2] = s.position.z + s.right.z * d0 * side
+    positions[o + 3] = s.position.x + s.right.x * d1 * side
+    positions[o + 4] = s.position.y - drop
+    positions[o + 5] = s.position.z + s.right.z * d1 * side
+    for (let k = 0; k < 2; k++) {
+      normals[o + k * 3] = 0
+      normals[o + k * 3 + 1] = 1
+      normals[o + k * 3 + 2] = 0
+    }
+    uvs[i * 4] = 0; uvs[i * 4 + 1] = s.distance / 3
+    uvs[i * 4 + 2] = 1; uvs[i * 4 + 3] = s.distance / 3
+  }
+  for (let i = 0; i < n - 1; i++) {
+    const a = i * 2, b = i * 2 + 1, c = i * 2 + 2, d = i * 2 + 3
+    const o = i * 6
+    if (side > 0) {
+      indices[o] = a; indices[o + 1] = b; indices[o + 2] = c
+      indices[o + 3] = b; indices[o + 4] = d; indices[o + 5] = c
+    } else {
+      indices[o] = a; indices[o + 1] = c; indices[o + 2] = b
+      indices[o + 3] = b; indices[o + 4] = c; indices[o + 5] = d
+    }
+  }
+  return { positions, normals, uvs, indices }
 }
