@@ -12,6 +12,8 @@
  *
  * ブラウザの自動再生制限のため、最初のユーザー操作（キー/クリック）後に start() を呼ぶ。
  */
+import { ENGINE_WORKLET_SOURCE } from './engineWorklet'
+
 export interface EngineSoundInput {
   /** 0..1 */
   throttle: number
@@ -177,10 +179,13 @@ function softClipCurve(amount: number): Float32Array<ArrayBuffer> {
 }
 
 interface EngineNodes {
+  /** AudioWorklet 版エンジン（利用できない環境では null で、オシレータ版を使う） */
+  worklet: AudioWorkletNode | null
   oscs: { osc: OscillatorNode; ratio: number; gain: GainNode }[]
   exhaust: { src: AudioBufferSourceNode; filter: BiquadFilterNode; gain: GainNode }
   shaper: WaveShaperNode
   filter: BiquadFilterNode
+  presence: BiquadFilterNode
   gain: GainNode
   wind: { gain: GainNode; filter: BiquadFilterNode }
   road: { gain: GainNode }
@@ -209,8 +214,15 @@ export class AudioEngine {
   private _style: BgmStyle = 'eurobeat'
   private gear = 0
   private shiftUntil = 0
-  private rpmSmoothed = 0.12
+  private shiftDirection = 0
+  /** 回転数 [rpm]（慣性付きの状態） */
+  private rpm = 900
+  private lastUpdate = 0
   volume = 0.7
+  /** 現在の回転数 [rpm]（HUD 用） */
+  get currentRpm(): number {
+    return this.rpm
+  }
 
   get started(): boolean {
     return this.ctx !== null
@@ -223,6 +235,9 @@ export class AudioEngine {
   }
   get currentGear(): number {
     return this.gear + 1
+  }
+  get engineMode(): 'worklet' | 'oscillator' | 'off' {
+    return this.engine ? (this.engine.worklet ? 'worklet' : 'oscillator') : 'off'
   }
 
   /** ユーザー操作後に呼ぶ。複数回呼んでも安全 */
@@ -287,6 +302,7 @@ export class AudioEngine {
     this.sfxBus = sfxBus
 
     this.engine = this.buildEngine(ctx, master, reverbSend)
+    void this.attachWorklet(ctx)
 
     this.bgmNextTime = ctx.currentTime + 0.1
     this.bgmStep = 0
@@ -294,6 +310,27 @@ export class AudioEngine {
   }
 
   private delayNode: DelayNode | null = null
+
+  /** AudioWorklet 版エンジンを読み込み、成功したらオシレータ版と差し替える */
+  private async attachWorklet(ctx: AudioContext): Promise<void> {
+    const e = this.engine
+    if (!e || !ctx.audioWorklet) return
+    try {
+      const blob = new Blob([ENGINE_WORKLET_SOURCE], { type: 'application/javascript' })
+      const url = URL.createObjectURL(blob)
+      await ctx.audioWorklet.addModule(url)
+      URL.revokeObjectURL(url)
+      if (this.engine !== e) return
+      const node = new AudioWorkletNode(ctx, 'touge-engine', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] })
+      node.connect(e.shaper)
+      // オシレータ版を止める
+      for (const o of e.oscs) o.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.05)
+      e.exhaust.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.05)
+      e.worklet = node
+    } catch (err) {
+      console.warn('[AudioEngine] AudioWorklet unavailable, using oscillator engine', err)
+    }
+  }
 
   private buildEngine(ctx: AudioContext, master: GainNode, reverbSend: GainNode): EngineNodes {
     const shaper = ctx.createWaveShaper()
@@ -307,10 +344,30 @@ export class AudioEngine {
     gain.gain.value = 0
     const body = ctx.createBiquadFilter()
     body.type = 'peaking'
-    body.frequency.value = 180
-    body.Q.value = 1.2
-    body.gain.value = 5
-    shaper.connect(filter).connect(body).connect(gain)
+    body.frequency.value = 110
+    body.Q.value = 1.0
+    body.gain.value = 6
+    const presence = ctx.createBiquadFilter()
+    presence.type = 'peaking'
+    presence.frequency.value = 2400
+    presence.Q.value = 1.2
+    presence.gain.value = 0
+    // 排気管の共鳴（短いフィードバックディレイ = コムフィルタ）
+    const pipe = ctx.createDelay(0.05)
+    pipe.delayTime.value = 0.0042
+    const pipeFb = ctx.createGain()
+    pipeFb.gain.value = 0.42
+    const pipeLp = ctx.createBiquadFilter()
+    pipeLp.type = 'lowpass'
+    pipeLp.frequency.value = 1800
+    pipe.connect(pipeLp).connect(pipeFb).connect(pipe)
+    const pipeMix = ctx.createGain()
+    pipeMix.gain.value = 0.5
+    shaper.connect(filter)
+    filter.connect(body)
+    filter.connect(pipe)
+    pipeLp.connect(pipeMix).connect(body)
+    body.connect(presence).connect(gain)
     gain.connect(master)
     const engineVerb = ctx.createGain()
     engineVerb.gain.value = 0.25
@@ -393,10 +450,12 @@ export class AudioEngine {
     skidSrc.start()
 
     return {
+      worklet: null,
       oscs,
       exhaust: { src, filter: ef, gain: eg },
       shaper,
       filter,
+      presence,
       gain,
       wind: { gain: windGain, filter: windFilter },
       road: { gain: roadGain },
@@ -422,37 +481,69 @@ export class AudioEngine {
     const e = this.engine
     if (!ctx || !e) return
     const t = ctx.currentTime
-    const ratio = clamp01(input.speedMs / Math.max(1, input.maxSpeedMs))
+    const dt = this.lastUpdate ? Math.min(0.1, t - this.lastUpdate) : 1 / 60
+    this.lastUpdate = t
+    const IDLE = 900
+    const REDLINE = 7400
+    const v = input.speedMs
+    const ratio = clamp01(v / Math.max(1, input.maxSpeedMs))
 
-    // ギア: 速度帯から決定。上げ下げでシフト（短いスロットルカット）
-    let gear = GEAR_TOPS.findIndex((top) => ratio <= top)
-    if (gear < 0) gear = GEAR_TOPS.length - 1
-    if (gear !== this.gear) {
-      if (t > this.shiftUntil) {
-        this.shiftUntil = t + 0.14
-        if (gear > this.gear && input.speedMs > 3) this.playSfx('shift')
+    // ギア選択（ヒステリシス付き）
+    const low = this.gear === 0 ? 0 : GEAR_TOPS[this.gear - 1]
+    const top = GEAR_TOPS[this.gear]
+    const inGear = clamp01((ratio - low) / (top - low))
+    if (t > this.shiftUntil) {
+      if (inGear > 0.97 && this.gear < GEAR_TOPS.length - 1 && input.throttle > 0.1) {
+        this.gear++
+        this.shiftUntil = t + 0.18
+        this.shiftDirection = 1
+        if (v > 3) this.playSfx('shift')
+      } else if (inGear < 0.12 && this.gear > 0) {
+        this.gear--
+        this.shiftUntil = t + 0.12
+        this.shiftDirection = -1
       }
-      this.gear = gear
     }
-    const low = gear === 0 ? 0 : GEAR_TOPS[gear - 1]
-    const span = GEAR_TOPS[gear] - low
-    const inGear = clamp01((ratio - low) / span)
-    const idle = 0.11
-    let rpm = input.speedMs < 0.5 ? idle + input.throttle * 0.35 : idle + (1 - idle) * (0.22 + 0.78 * inGear)
-    if (t < this.shiftUntil) rpm *= 0.72
-    // 慣性
-    this.rpmSmoothed += (rpm - this.rpmSmoothed) * 0.25
-    const r = this.rpmSmoothed
-    const fundamental = 28 + r * 215 // 4 気筒の爆発周波数相当
-    for (const o of e.oscs) o.osc.frequency.setTargetAtTime(fundamental * o.ratio, t, 0.02)
-    e.exhaust.filter.frequency.setTargetAtTime(fundamental * 7, t, 0.03)
-    e.exhaust.gain.gain.setTargetAtTime(0.05 + input.throttle * 0.16, t, 0.05)
-    const load = input.throttle > 0 ? 1 : 0.45
-    e.filter.frequency.setTargetAtTime(420 + r * 2600 * load + input.throttle * 700, t, 0.04)
-    e.gain.gain.setTargetAtTime((0.1 + r * 0.16) * (0.65 + 0.35 * load) * (t < this.shiftUntil ? 0.55 : 1), t, 0.04)
+    const low2 = this.gear === 0 ? 0 : GEAR_TOPS[this.gear - 1]
+    const inGear2 = clamp01((ratio - low2) / (GEAR_TOPS[this.gear] - low2))
+    const shifting = t < this.shiftUntil
+
+    // 目標回転数: 停車中はスロットルで空ぶかし、走行中はギア内位置に比例
+    const moving = v > 0.8
+    let target: number
+    if (!moving) target = IDLE + input.throttle * (REDLINE * 0.62 - IDLE)
+    else target = IDLE + (REDLINE - IDLE) * (0.18 + 0.82 * inGear2)
+    if (shifting && this.shiftDirection > 0) target *= 0.78
+    // 慣性: 吹け上がりは速く、落ちはゆっくり。負荷が高いほど上がりが鈍い
+    const rising = target > this.rpm
+    const rate = rising ? (moving ? 2400 + input.throttle * 3200 : 5200) : 2600
+    const delta = target - this.rpm
+    this.rpm += Math.sign(delta) * Math.min(Math.abs(delta), rate * dt)
+    this.rpm = Math.max(IDLE * 0.9, Math.min(REDLINE, this.rpm))
+
+    // 負荷: 加速中（スロットル × まだ回転が上がり切っていない）ほど重い。惰性は軽い
+    const accelLoad = input.throttle * (0.55 + 0.45 * (1 - inGear2))
+    const load = shifting ? 0.15 : moving ? accelLoad : input.throttle * 0.6
+    const throttleEff = shifting ? 0 : input.throttle
+    const r = (this.rpm - IDLE) / (REDLINE - IDLE)
+
+    if (e.worklet) {
+      const p = e.worklet.parameters
+      p.get('rpm')!.setTargetAtTime(this.rpm, t, 0.03)
+      p.get('throttle')!.setTargetAtTime(throttleEff, t, 0.05)
+      p.get('load')!.setTargetAtTime(load, t, 0.08)
+    } else {
+      const fundamental = (this.rpm / 60) * 2
+      for (const o of e.oscs) o.osc.frequency.setTargetAtTime(fundamental * o.ratio, t, 0.02)
+      e.exhaust.filter.frequency.setTargetAtTime(fundamental * 7, t, 0.03)
+      e.exhaust.gain.gain.setTargetAtTime(0.05 + throttleEff * 0.16, t, 0.05)
+    }
+    // トーン: 負荷で明るく・前に出る。惰性は籠る
+    e.filter.frequency.setTargetAtTime(380 + r * 2200 + load * 1800, t, 0.06)
+    e.presence.gain.setTargetAtTime(load * 7 - 2, t, 0.08)
+    e.gain.gain.setTargetAtTime((0.16 + r * 0.12) * (0.6 + 0.4 * load) * (shifting ? 0.7 : 1), t, 0.05)
 
     // 風・路面
-    const v = input.speedMs
     e.wind.gain.gain.setTargetAtTime(clamp01((v - 8) / 45) ** 2 * 0.5, t, 0.1)
     e.wind.filter.frequency.setTargetAtTime(400 + v * 40, t, 0.1)
     e.road.gain.gain.setTargetAtTime(input.wheelsOnGround > 0 ? clamp01(v / 30) * 0.35 : 0, t, 0.1)

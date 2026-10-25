@@ -1,6 +1,6 @@
 import { Canvas, useThree } from '@react-three/fiber'
 import { Physics } from '@react-three/rapier'
-import { Sky } from '@react-three/drei'
+import { Environment, Lightformer, Sky } from '@react-three/drei'
 import { PostEffects, SceneLighting } from './SceneEffects'
 import { Suspense, useEffect, useState } from 'react'
 import { FollowCamera } from '../camera/FollowCamera'
@@ -13,6 +13,7 @@ import { audioEngine } from '../audio/AudioEngine'
 import { keyboard } from '../input/keyboard'
 import { useGameStore } from './gameStore'
 import { useGarageStore } from './garageStore'
+import { TIME_PRESETS } from './timePresets'
 import { RaceController } from './RaceController'
 import { runtime } from './runtime'
 
@@ -48,6 +49,7 @@ declare global {
       course: BuiltCourse | null
       scene?: unknown
       camera?: unknown
+      audio: typeof audioEngine
       requestReset(): void
     }
   }
@@ -70,6 +72,9 @@ export function Game() {
   const courseId = useGameStore((s) => s.courseId)
   const course = useCourse(courseId)
   const rivalEnabled = useGameStore((s) => s.rivalEnabled)
+  const rivals = useGarageStore((s) => s.rivals)
+  const timeOfDay = useGameStore((s) => s.timeOfDay)
+  const tp = TIME_PRESETS[timeOfDay]
   const setupDone = useGameStore((s) => s.setupDone)
   const muted = useGameStore((s) => s.muted)
   const bgmStyle = useGameStore((s) => s.bgmStyle)
@@ -111,6 +116,7 @@ export function Game() {
       garage: useGarageStore,
       runtime,
       course,
+      audio: audioEngine,
       requestReset: () => {
         runtime.resetRequested = true
       },
@@ -119,20 +125,27 @@ export function Game() {
 
   return (
     <Canvas
-      shadows="soft"
+      shadows
       dpr={[1, 1.5]}
       camera={{ fov: 62, near: 0.2, far: 2500, position: [0, 5, 20] }}
       gl={{ antialias: !postEffects, powerPreference: 'high-performance' }}
     >
-      <color attach="background" args={['#b9cfe0']} />
-      <Sky distance={450000} sunPosition={[90, 140, -110]} turbidity={4} rayleigh={1.6} mieCoefficient={0.004} mieDirectionalG={0.85} />
+      <color attach="background" args={[tp.background]} />
+      <Sky distance={450000} sunPosition={tp.sunPosition} turbidity={tp.turbidity} rayleigh={tp.rayleigh} mieCoefficient={0.004} mieDirectionalG={0.85} />
       <SceneLighting />
+      {/* 塗装・ガラスの映り込み用の簡易環境（空のグラデーション + 太陽）。背景には使わない */}
+      <Environment resolution={128} frames={1} background={false} environmentIntensity={tp.envIntensity}>
+        <Lightformer form="rect" intensity={1.6} color="#dfeaf7" position={[0, 12, 0]} scale={[40, 40, 1]} rotation={[Math.PI / 2, 0, 0]} />
+        <Lightformer form="rect" intensity={0.5} color="#6f8a5a" position={[0, -8, 0]} scale={[40, 40, 1]} rotation={[-Math.PI / 2, 0, 0]} />
+        <Lightformer form="circle" intensity={6} color="#fff2d0" position={[8, 10, -6]} scale={[3, 3, 1]} target={[0, 0, 0]} />
+        <Lightformer form="rect" intensity={0.9} color="#bcd0e6" position={[-12, 4, 0]} scale={[8, 6, 1]} rotation={[0, Math.PI / 2, 0]} />
+      </Environment>
       {course && (
         <Suspense fallback={null}>
           <Physics key={course.definition.id} timeStep={1 / 60} gravity={[0, -9.81, 0]} interpolate updatePriority={-1}>
             <CourseScene course={course} />
             <Vehicle course={course} />
-            {rivalEnabled && <RivalVehicle course={course} />}
+            {rivalEnabled && rivals.filter((r) => r.enabled).map((r, i) => <RivalVehicle key={r.id} course={course} entry={r} index={i} />)}
             <RaceController course={course} />
           </Physics>
         </Suspense>

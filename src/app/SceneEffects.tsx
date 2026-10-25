@@ -7,13 +7,16 @@ import { Bloom, EffectComposer, SMAA, Vignette } from '@react-three/postprocessi
 import { useMemo, useRef } from 'react'
 import { DirectionalLight, Object3D, Vector3 } from 'three'
 import { runtime } from './runtime'
-
-const SUN_DIR = new Vector3(0.45, 0.7, -0.55).normalize()
+import { useGameStore } from './gameStore'
+import { TIME_PRESETS } from './timePresets'
 
 export function SceneLighting() {
   const lightRef = useRef<DirectionalLight>(null)
   const target = useMemo(() => new Object3D(), [])
   const scene = useThree((s) => s.scene)
+  const timeOfDay = useGameStore((s) => s.timeOfDay)
+  const tp = TIME_PRESETS[timeOfDay]
+  const sunDir = useMemo(() => new Vector3(...tp.sunPosition).normalize(), [tp])
   useFrame(() => {
     const light = lightRef.current
     if (!light) return
@@ -24,17 +27,18 @@ export function SceneLighting() {
     const snap = 0.5
     anchor.x = Math.round(anchor.x / snap) * snap
     anchor.z = Math.round(anchor.z / snap) * snap
-    light.position.copy(anchor).addScaledVector(SUN_DIR, 220)
+    light.position.copy(anchor).addScaledVector(sunDir, 220)
     light.target = target
     light.target.updateMatrixWorld()
   })
   return (
     <>
-      <hemisphereLight args={['#dbe7f6', '#4d5b3c', 0.75]} />
+      <hemisphereLight args={[tp.hemiSky, tp.hemiGround, tp.hemiIntensity]} />
+      <fog attach="fog" args={[tp.fog, timeOfDay === 'night' ? 60 : 220, timeOfDay === 'night' ? 500 : 1100]} />
       <directionalLight
         ref={lightRef}
-        intensity={2.2}
-        color="#fff4e0"
+        intensity={tp.sunIntensity}
+        color={tp.sunColor}
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.0004}

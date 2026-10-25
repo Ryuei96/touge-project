@@ -1,8 +1,15 @@
 import { create } from 'zustand'
 import type { BgmStyle } from '../audio/AudioEngine'
-import type { DialogueLine } from '../race/dialogue'
+
 
 export type CameraMode = 'chase' | 'hood' | 'far'
+export type TimeOfDay = 'day' | 'dusk' | 'night'
+
+export interface DialogueLine {
+  /** キャラクター ID */
+  speaker: string
+  text: string
+}
 export const CAMERA_MODES: CameraMode[] = ['chase', 'hood', 'far']
 export const CAMERA_LABELS: Record<CameraMode, string> = { chase: '追従', hood: 'ボンネット', far: '俯瞰' }
 
@@ -29,12 +36,17 @@ export interface GameState {
   setupDone: boolean
   lap: number
   lapTotal: number
-  /** ライバル */
+  /** ライバル（セットアップのロスターで有効な台数） */
   rivalEnabled: boolean
   rivalSkill: 'easy' | 'normal' | 'hard'
   /** 1 = 先頭 */
   rank: number
+  rankTotal: number
   rivalFinished: boolean
+  /** レース前会話（セットアップ後）とレース後会話 */
+  intro: boolean
+  outroShown: boolean
+  timeOfDay: TimeOfDay
   /** 掛け合い */
   dialogue: { lines: DialogueLine[]; index: number; key: number } | null
   /** サウンド */
@@ -80,18 +92,22 @@ export const useGameStore = create<GameState>((set) => ({
   rivalEnabled: initialQuery?.get('rival') === '1',
   rivalSkill: 'normal',
   rank: 1,
+  rankTotal: 1,
   rivalFinished: false,
+  intro: false,
+  outroShown: false,
+  timeOfDay: (initialQuery?.get('time') as TimeOfDay | null) ?? 'day',
   dialogue: null,
   muted: initialQuery?.get('mute') === '1',
   bgmStyle: (initialQuery?.get('bgm') as BgmStyle | null) ?? 'eurobeat',
   postEffects: initialQuery?.get('fx') !== '0',
 
-  setCourse: (id) => set({ courseId: id, status: 'loading', elapsed: 0, started: false, finished: false, finishTime: null, checkpointIndex: 0, progress: 0, resets: 0, lap: 1, rank: 1, rivalFinished: false, dialogue: null }),
+  setCourse: (id) => set({ courseId: id, status: 'loading', elapsed: 0, started: false, finished: false, finishTime: null, checkpointIndex: 0, progress: 0, resets: 0, lap: 1, rank: 1, rivalFinished: false, dialogue: null, outroShown: false }),
   setStatus: (status, message) => set({ status, errorMessage: message }),
   cycleCamera: () => set((s) => ({ cameraMode: CAMERA_MODES[(CAMERA_MODES.indexOf(s.cameraMode) + 1) % CAMERA_MODES.length] })),
   setAutopilot: (on) => set({ autopilot: on }),
   patch: (partial) => set(partial),
-  resetRace: () => set({ elapsed: 0, started: false, finished: false, finishTime: null, checkpointIndex: 0, progress: 0, lap: 1, rank: 1, rivalFinished: false, dialogue: null }),
+  resetRace: () => set({ elapsed: 0, started: false, finished: false, finishTime: null, checkpointIndex: 0, progress: 0, lap: 1, rank: 1, rivalFinished: false, dialogue: null, outroShown: false }),
   startRun: () => set({ setupDone: true }),
   showDialogue: (lines) => set((s) => ({ dialogue: { lines, index: 0, key: (s.dialogue?.key ?? 0) + 1 } })),
   advanceDialogue: () =>

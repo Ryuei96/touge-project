@@ -24,8 +24,8 @@ export interface VehicleRuntime {
   /** 直近の入力（サウンド用） */
   throttle: number
   handbrake: boolean
-  /** ライバル車（いなければ null） */
-  rival: RivalRuntime | null
+  /** ライバル車（0 台以上） */
+  rivals: RivalRuntime[]
   /** 現在のコース（HUD のミニマップ用） */
   course: BuiltCourse | null
   /** 自車の描画オブジェクト（物理補間後の最新位置をカメラが直接読むため） */
@@ -33,6 +33,9 @@ export interface VehicleRuntime {
 }
 
 export interface RivalRuntime {
+  id: string
+  characterId: string
+  carId: string
   position: Vector3
   forward: Vector3
   speedMs: number
@@ -56,7 +59,7 @@ export const runtime: VehicleRuntime = {
   lapIndex: 0,
   throttle: 0,
   handbrake: false,
-  rival: null,
+  rivals: [],
   course: null,
   playerObject: null,
 }

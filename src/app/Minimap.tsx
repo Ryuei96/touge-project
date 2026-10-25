@@ -6,6 +6,7 @@ import { useEffect, useRef } from 'react'
 import type { BuiltCourse } from '../course/types'
 import { runtime } from './runtime'
 import { useGameStore } from './gameStore'
+import { useGarageStore } from './garageStore'
 
 const SIZE = 180
 
@@ -65,10 +66,11 @@ export function Minimap({ course }: { course: BuiltCourse | null }) {
         ctx.arc(cx, cz, isGoal ? 4 : 3, 0, Math.PI * 2)
         ctx.fill()
       })
-      // ライバル
-      if (runtime.rival) {
-        const [cx, cz] = toCanvas(runtime.rival.position.x, runtime.rival.position.z)
-        ctx.fillStyle = '#ffb46a'
+      // ライバル（キャラクター色）
+      const chars = useGarageStore.getState().characters
+      for (const r of runtime.rivals) {
+        const [cx, cz] = toCanvas(r.position.x, r.position.z)
+        ctx.fillStyle = chars.find((c) => c.id === r.characterId)?.color ?? '#ffb46a'
         ctx.beginPath()
         ctx.arc(cx, cz, 4, 0, Math.PI * 2)
         ctx.fill()

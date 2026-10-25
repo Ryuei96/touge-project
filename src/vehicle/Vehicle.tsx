@@ -95,7 +95,12 @@ export function Vehicle({ course }: { course: BuiltCourse }) {
       const r = driver.current.update(course.samples, runtime.position, runtime.forward, runtime.speedMs, runtime.progressIndex, w.timestep, { closed: course.definition.closed })
       input = state.finished ? { throttle: 0, brake: 1, steer: r.input.steer, handbrake: false } : r.input
     }
-    if (!state.setupDone) input = { throttle: 0, brake: 1, steer: 0, handbrake: true }
+    if (!state.setupDone) {
+      // セットアップ・会話中は停車させる（ブレーキ入力は後退扱いになるので速度を直接ゼロにする）
+      input = { throttle: 0, brake: 0, steer: 0, handbrake: true }
+      vehicle.chassis.setLinvel({ x: 0, y: vehicle.chassis.linvel().y, z: 0 }, true)
+      vehicle.chassis.setAngvel({ x: 0, y: 0, z: 0 }, true)
+    }
     lastInput.current = input
     runtime.throttle = input.throttle
     runtime.handbrake = input.handbrake
@@ -173,7 +178,7 @@ export function Vehicle({ course }: { course: BuiltCourse }) {
         onContactForce={(e) => onHit(e.totalForceMagnitude)}
       />
       <group ref={visualRef}>
-        <CarBody look={preset.look} config={cfg} bodyColor={tuning.bodyColor} wing={tuning.parts.aero === 'wing'} braking={braking} />
+        <CarBody look={preset.look} config={cfg} bodyColor={tuning.bodyColor} wing={tuning.parts.aero === 'wing'} braking={braking} spotlights />
         {/* ホイール */}
         {[0, 1, 2, 3].map((i) => (
           <WheelMesh

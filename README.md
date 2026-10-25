@@ -27,11 +27,13 @@ npm run build      # 本番ビルド（dist/）
 | M | ミュート |
 | P | オートパイロット ON/OFF（検証用） |
 
-起動すると走行前セットアップ画面が出る。コース・車種・パーツ・ライバル・BGM を決めて「走り出す」。
+起動すると走行前セットアップ画面が出る（タブ: レース / ガレージ / キャラクター）。
+コース・時間帯（昼/夕方/夜）・BGM、車種・パーツ、キャラクターの名前・口調・見た目、ライバルのロスター（最大 4 台）を決めて
+「走り出す」とスタート前の会話シーンが始まり、その後にレース。ゴール後はレース後の会話が出る。
 走行中も左上の「ガレージ」「モデル配置」「セットアップ」から変更できる。
 
 URL パラメータ: `?course=sample-geo`（コース選択）, `?autopilot=1`（自動走行で開始、セットアップを省略）,
-`?rival=1`（ライバルあり）, `?bgm=phonk|eurobeat|off`, `?mute=1`, `?skipSetup=1`。
+`?rival=1`（ライバルあり）, `?bgm=phonk|eurobeat|off`, `?mute=1`, `?skipSetup=1`, `?time=day|dusk|night`, `?fx=0`（ポストエフェクト無効）。
 
 同梱コース: `touge01` 鳴沢峠（架空の峠）, `loop01` 湖畔サーキット（架空・3 周）, `sample-geo` GeoJSON + DEM + CityGML + 点群の合成サンプル,
 `bim-bridge` GLB（Blender 生成の道路 + 橋梁）から走行路を読む BIM サンプル。すべて架空データ。
@@ -67,12 +69,13 @@ src/
   scenery/     SceneryGenerator（樹木配置）, EnvironmentLayers（点群・建物レイヤー）
   vehicle/     vehicleConfig, RaycastVehicle（Rapier 車両コントローラーのラッパー）, Vehicle.tsx,
                carCatalog（車種・パーツ）, CarBody（見た目）, autopilot（AutopilotDriver）, RivalVehicle
-  race/        dialogue（掛け合い台詞・オリジナルキャラクター）
-  audio/       AudioEngine（エンジン音・スキール・BGM 2 スタイル）
+  race/        characters（キャラクター・口調別台詞テンプレート）, conversation（レース前後の会話）
+  audio/       AudioEngine（AudioWorklet エンジン音・環境音・SE・BGM 2 スタイル）, engineWorklet（爆発パルス合成）
   input/       keyboard
   camera/      FollowCamera
-  app/         Game（Canvas / Physics）, HUD, SetupScreen, GaragePanel, PlacementPanel, Minimap, DialogueOverlay,
-               RaceController（CP・周回・ゴール・順位・会話トリガー）, gameStore, garageStore, runtime
+  app/         Game（Canvas / Physics）, HUD, SetupScreen, GaragePanel, CharacterPanel, PlacementPanel, Minimap,
+               DialogueOverlay, ConversationScene, Avatar, SceneEffects（影・ポストプロセス）, timePresets,
+               RaceController（CP・周回・ゴール・順位・掛け合いトリガー）, gameStore, garageStore, runtime
   __tests__/   vitest 単体テスト
 tools/blender/ make_sample_assets.py（サンプル GLB 生成）, README.md（BlenderMCP の設定）
 scripts/       make-sample-geo.mjs（合成 CityGML / PLY 生成）, make-artifact-page.mjs（単一 HTML → Artifact 用）
@@ -143,8 +146,10 @@ docs/          open-data-roadmap.md（全国オープンデータ可視化・カ
 | 追加 | 既存コースへの GLB 配置（鳥居・橋梁セグメント）と trimesh 衝突 | 確認済み（描画・走行） |
 | 追加 | 車種 4 種・パーツ 6 カテゴリ・走行前セットアップ画面 | 確認済み（画面表示・パラメータ反映） |
 | 追加 | ミニマップ・進行バー・周回（`loop01` 3 周完走） | 確認済み |
-| 追加 | ライバル車（3 段階）・順位・掛け合い（9 本表示） | 確認済み（ライバル完走、プレイヤーも完走） |
-| 追加 | 合成サウンド（エンジン・スキール・BGM 2 スタイル） | 実装済み。ヘッドレスではエラー無しを確認、音質は実機で要確認 |
+| 追加 | ライバル車（最大 4 台、3 段階）・順位 N/M・口調別の掛け合い | 確認済み（3 台同時出走、順位・会話表示） |
+| 追加 | キャラクター設定（名前・口調・似顔絵）とレース前後の会話シーン | 確認済み（画面表示・台詞生成） |
+| 追加 | AudioWorklet エンジン音（爆発パルス合成・慣性付き回転数・5 速）、環境音、SE、リバーブ付き BGM | ヘッドレスで worklet 動作と回転数変化を確認。音質は実機で要確認 |
+| 追加 | ヘッドライト（スポットライト + グロー）、クリアコート塗装、環境反射、昼/夕方/夜 | 確認済み（夜間に路面が照らされる） |
 | 追加 | PLATEAU 形式 CityGML（LOD1）と PLY 点群のレイヤー表示・建物衝突 | 確認済み（合成データ） |
 | 追加 | LAS 1.2〜1.4 点群の解析 | 単体テストのみ（実データ未検証） |
 
@@ -160,7 +165,8 @@ docs/          open-data-roadmap.md（全国オープンデータ可視化・カ
 | 全国オープンデータの可視化・場所選択 | 設計のみ | MapLibre + `openDataCatalog`。`docs/open-data-roadmap.md` 参照 |
 | カスタムコース生成の有料化 / カミングスーン要望 | 設計のみ | 決済・リクエスト管理・生成ジョブのバックエンドが必要。同文書参照 |
 | AI 景観生成・自然言語コース編集 | 未実装 | `SceneryInstances` と `layers` を AI 生成の受け皿にする想定 |
-| ライバルの AI | 簡易 | pure pursuit + スタック時後退。追い抜きライン・ブロックは未実装 |
+| ライバルの AI | 簡易 | pure pursuit + スタック時後退。追い抜きライン・ブロック・ライバル同士の駆け引きは未実装 |
+| 掛け合いの音声 | 未実装 | テキストのみ。音声合成（Web Speech API / 外部 TTS）は未接続 |
 | 車両モデル | 簡易形状 | 全車プリミティブ構成。Blender で作った GLB 車体の読み込みは `GlbAsset` で可能だが未接続 |
 | サウンド | 合成のみ | 録音素材なし。実機での音量バランス調整が必要 |
 

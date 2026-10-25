@@ -44,7 +44,7 @@ export function HUD() {
         </div>
         {s.rivalEnabled && (
           <div className="row small">
-            順位 <b className={s.rank === 1 ? 'rank-first' : 'rank-second'}>{s.rank} 位</b> / 2 {s.rivalFinished && !s.finished && '（ライバルはゴール済み）'}
+            順位 <b className={s.rank === 1 ? 'rank-first' : 'rank-second'}>{s.rank} 位</b> / {s.rankTotal} {s.rivalFinished && !s.finished && '（先にゴールした車あり）'}
           </div>
         )}
         <div className="row small">カメラ: {CAMERA_LABELS[s.cameraMode]} (C) ・ 復帰 {s.resets} 回 (R)</div>
@@ -97,7 +97,7 @@ export function HUD() {
 
       {s.finished && (
         <div className="finish-banner">
-          <div className="finish-title">{s.rivalEnabled ? (s.rank === 1 ? 'WIN!' : 'LOSE…') : 'GOAL!'}</div>
+          <div className="finish-title">{s.rivalEnabled ? (s.rank === 1 ? 'WIN!' : `${s.rank} 位`) : 'GOAL!'}</div>
           <div className="finish-time">{s.finishTime !== null ? formatTime(s.finishTime) : ''}</div>
           <div className="small">R で最終チェックポイントから再開 / コース選択で再走</div>
         </div>

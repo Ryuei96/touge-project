@@ -1,21 +1,31 @@
 /**
  * チェックポイント通過・周回・ゴール判定・タイム計測・順位・掛け合いのトリガー。Canvas 内で useFrame を使う。
+ * 掛け合いはキャラクターの口調（personality）別テンプレートから生成する。
  */
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import { audioEngine } from '../audio/AudioEngine'
 import type { BuiltCourse } from '../course/types'
-import { pickDialogue, type DialogueEvent } from '../race/dialogue'
+import { banterLine, getCharacter, type BanterEvent, type Character } from '../race/characters'
+import { getCarPreset } from '../vehicle/carCatalog'
 import { nearestSampleIndex, sampleIndexAtDistance } from '../road/spline'
-import { useGameStore } from './gameStore'
+import { useGameStore, type DialogueLine } from './gameStore'
+import { useGarageStore } from './garageStore'
 import { runtime } from './runtime'
+
+interface RivalMemory {
+  ahead: boolean | null
+  lastClose: number
+  lastPass: number
+}
 
 export function RaceController({ course }: { course: BuiltCourse }) {
   const acc = useRef(0)
   const fired = useRef(new Set<string>())
-  const lastRank = useRef(1)
   const lastResets = useRef(0)
   const hairpinCooldown = useRef(0)
+  const lastTalk = useRef(0)
+  const memory = useRef(new Map<string, RivalMemory>())
   const total = course.markers.checkpoints.length
   const closed = course.definition.closed ?? false
   const lapTotal = closed ? (course.definition.laps ?? 1) : 1
@@ -29,19 +39,46 @@ export function RaceController({ course }: { course: BuiltCourse }) {
     runtime.resetRequested = true
     acc.current = 0
     fired.current.clear()
-    lastRank.current = 1
+    memory.current.clear()
     return () => {
       runtime.respawn = null
     }
   }, [course, total, lapTotal])
 
-  const say = (event: DialogueEvent, once = true) => {
-    const key = once ? event : `${event}-${Math.floor(acc.current)}`
-    if (fired.current.has(key)) return
-    fired.current.add(key)
+  /** 台詞を組み立てて表示。話者はキャラクター ID */
+  const speak = (lines: DialogueLine[], minGap = 2.5) => {
     const s = useGameStore.getState()
-    if (s.dialogue) return // 進行中の会話は邪魔しない
-    s.showDialogue(pickDialogue(event, course.definition.id.length + fired.current.size))
+    if (lines.length === 0 || s.dialogue) return false
+    if (acc.current - lastTalk.current < minGap && lastTalk.current > 0) return false
+    lastTalk.current = acc.current
+    s.showDialogue(lines)
+    return true
+  }
+
+  const names = () => {
+    const g = useGarageStore.getState()
+    const player = getCharacter(g.characters, g.playerCharacterId)
+    const nav = getCharacter(g.characters, g.navigatorCharacterId)
+    return { g, player, nav }
+  }
+
+  const rivalLine = (ch: Character, event: BanterEvent, other: string, seed: number, carId?: string): DialogueLine | null => {
+    const { player } = names()
+    const text = banterLine(ch.personality, event, { player: player.name, rival: ch.name, rivalCar: carId ? getCarPreset(carId).name : undefined, other }, seed)
+    return text ? { speaker: ch.id, text } : null
+  }
+
+  const navLine = (event: BanterEvent, other: string, seed: number): DialogueLine | null => {
+    const { player, nav } = names()
+    if (nav.id === player.id) return null
+    const text = banterLine(nav.personality, event, { player: player.name, rival: nav.name, other }, seed)
+    return text ? { speaker: nav.id, text } : null
+  }
+
+  const once = (key: string): boolean => {
+    if (fired.current.has(key)) return false
+    fired.current.add(key)
+    return true
   }
 
   useFrame((_, dt) => {
@@ -54,16 +91,28 @@ export function RaceController({ course }: { course: BuiltCourse }) {
     runtime.progressIndex = idx
     const withinLap = course.samples[idx].distance / course.length
     const progress = closed ? Math.min(1, (runtime.lapIndex + withinLap) / lapTotal) : withinLap
+    const { g, player, nav } = names()
+    const rivals = runtime.rivals
+    const seedBase = course.definition.id.length + fired.current.size
 
     if (!s.started && Math.abs(runtime.speedMs) > 0.5) {
       s.patch({ started: true })
       audioEngine.playSfx('start')
-      if (s.rivalEnabled) say('race-start')
+      const lines: DialogueLine[] = []
+      const nl = navLine('race-start', '', seedBase)
+      if (nl) lines.push(nl)
+      const first = rivals[0]
+      if (first) {
+        const l = rivalLine(getCharacter(g.characters, first.characterId), 'race-start', player.name, seedBase, first.carId)
+        if (l) lines.push(l)
+      }
+      speak(lines, 0)
     }
     if (s.started && !s.finished) acc.current += dt
     if (!s.started) {
       acc.current = 0
       fired.current.clear()
+      memory.current.clear()
     }
 
     let patch: Partial<typeof s> | null = null
@@ -82,10 +131,16 @@ export function RaceController({ course }: { course: BuiltCourse }) {
             patch = { checkpointIndex: 0, lap: runtime.lapIndex + 1 }
             runtime.respawn = course.markers.start
           } else {
-            const rivalAhead = runtime.rival?.finished ?? false
-            patch = { finished: true, finishTime: acc.current, checkpointIndex: s.checkpointIndex + 1 }
+            const mine = runtime.lapIndex * course.length + course.samples[idx].distance
+            const aheadCount = rivals.filter((r) => r.finished || r.raceDistance > mine).length
+            const rank = 1 + aheadCount
+            patch = { finished: true, finishTime: acc.current, checkpointIndex: s.checkpointIndex + 1, rank }
             audioEngine.playSfx('finish')
-            say(s.rivalEnabled ? (rivalAhead ? 'finish-lose' : 'finish-win') : 'finish-solo')
+            const won = rank === 1
+            const lines: DialogueLine[] = []
+            const nl = navLine(won ? 'finish-win' : 'finish-lose', '', seedBase)
+            if (nl) lines.push(nl)
+            speak(lines, 0)
           }
         } else {
           const si = sampleIndexAtDistance(course.samples, next.distance ?? 0)
@@ -93,37 +148,69 @@ export function RaceController({ course }: { course: BuiltCourse }) {
           runtime.respawn = { position: { x: sample.position.x, y: sample.position.y + 0.6, z: sample.position.z }, heading: sample.heading }
           patch = { checkpointIndex: s.checkpointIndex + 1 }
           audioEngine.playSfx('checkpoint')
-          if ((s.checkpointIndex + fired.current.size) % 2 === 0) say(`checkpoint`, false)
+          if (s.checkpointIndex % 2 === 0) {
+            const nl = navLine('checkpoint', '', s.checkpointIndex)
+            if (nl) speak([nl])
+          }
         }
       }
     }
 
-    // 順位
-    if (runtime.rival && s.started && !s.finished) {
-      const mine = runtime.lapIndex * course.length + course.samples[idx].distance
-      const rank = runtime.rival.finished || runtime.rival.raceDistance > mine + 2 ? 2 : 1
-      if (rank !== lastRank.current) {
-        if (acc.current > 3) say(rank === 1 ? 'overtake' : 'overtaken', false)
-        lastRank.current = rank
-        patch = { ...(patch ?? {}), rank }
-      }
-    }
-
-    // 区間イベント
+    // 順位と、ライバルごとの接近・追い抜きの掛け合い
     if (s.started && !s.finished) {
+      const mine = runtime.lapIndex * course.length + course.samples[idx].distance
+      let aheadCount = 0
+      for (const r of rivals) {
+        const ahead = r.finished || r.raceDistance > mine + 1.5
+        if (ahead) aheadCount++
+        const ch = getCharacter(g.characters, r.characterId)
+        let mem = memory.current.get(r.id)
+        if (!mem) {
+          mem = { ahead, lastClose: -99, lastPass: -99 }
+          memory.current.set(r.id, mem)
+        }
+        const gap = r.raceDistance - mine
+        if (acc.current > 3 && mem.ahead !== null && mem.ahead !== ahead && acc.current - mem.lastPass > 4) {
+          mem.lastPass = acc.current
+          // ahead=false になった = プレイヤーが抜いた
+          const event: BanterEvent = ahead ? 'overtake' : 'overtaken'
+          const line = rivalLine(ch, event, player.name, seedBase, r.carId)
+          const navl = navLine(ahead ? 'overtaken' : 'overtake', ch.name, seedBase)
+          speak([line, navl].filter((l): l is DialogueLine => !!l), 1)
+        }
+        mem.ahead = ahead
+        if (Math.abs(gap) < 14 && acc.current - mem.lastClose > 18 && acc.current > 4) {
+          mem.lastClose = acc.current
+          const event: BanterEvent = gap > 0 ? 'close-ahead' : 'close-behind'
+          const line = rivalLine(ch, event, player.name, seedBase + 1, r.carId)
+          const navl = Math.random() < 0.5 ? navLine(event, ch.name, seedBase) : null
+          speak([line, navl].filter((l): l is DialogueLine => !!l))
+        }
+      }
+      const rank = 1 + aheadCount
+      const rankTotal = rivals.length + 1
+      if (rank !== s.rank || rankTotal !== s.rankTotal) patch = { ...(patch ?? {}), rank, rankTotal }
+
+      // 区間イベント
       hairpinCooldown.current = Math.max(0, hairpinCooldown.current - dt)
       const ahead = course.samples[Math.min(n - 1, idx + 20)]
       if (Math.abs(ahead.curvature) > 1 / 28 && hairpinCooldown.current === 0) {
         hairpinCooldown.current = 25
-        say('hairpin', false)
+        const near = rivals.find((r) => Math.abs(r.raceDistance - mine) < 25)
+        const line = near ? rivalLine(getCharacter(g.characters, near.characterId), 'hairpin', player.name, seedBase, near.carId) : navLine('hairpin', '', seedBase)
+        if (line) speak([line])
       }
-      if (withinLap > 0.12 && withinLap < 0.2) say('first-corner')
-      if (progress > 0.85) say('last-section')
+      if (progress > 0.85 && once('last-section')) {
+        const line = navLine('last-section', '', seedBase) ?? (rivals[0] ? rivalLine(getCharacter(g.characters, rivals[0].characterId), 'last-section', player.name, seedBase) : null)
+        if (line) speak([line])
+      }
       if (s.resets !== lastResets.current) {
         lastResets.current = s.resets
-        say('crash', false)
+        const line = navLine('crash', '', s.resets) ?? (rivals[0] ? rivalLine(getCharacter(g.characters, rivals[0].characterId), 'crash', player.name, s.resets) : null)
+        if (line) speak([line], 0)
       }
     }
+    void nav
 
     const every = Math.floor(acc.current * 10)
     const prevEvery = Math.floor((acc.current - dt) * 10)

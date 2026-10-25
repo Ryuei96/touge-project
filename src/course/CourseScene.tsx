@@ -4,7 +4,7 @@
  */
 import { RigidBody, TrimeshCollider } from '@react-three/rapier'
 import { useEffect, useMemo } from 'react'
-import { BufferAttribute, BufferGeometry, Color, DoubleSide, InstancedMesh, Matrix4, Object3D } from 'three'
+import { BufferAttribute, BufferGeometry, DoubleSide, InstancedMesh, Matrix4, Object3D } from 'three'
 import type { BuiltCourse, CollisionShape, MeshData, PlacedAsset } from './types'
 import { createGrassDetailTexture, createRoadTexture } from './textures'
 import { useGameStore } from '../app/gameStore'
@@ -251,7 +251,6 @@ function PlacedAssets({ courseId }: { courseId: string }) {
 }
 
 export function CourseScene({ course }: { course: BuiltCourse }) {
-  const fogColor = useMemo(() => new Color('#b9cfe0'), [])
   const def = course.definition
   const isBim = def.source === 'bim' && def.model
   return (
@@ -274,7 +273,6 @@ export function CourseScene({ course }: { course: BuiltCourse }) {
       <Assets assets={def.assets} />
       <PlacedAssets courseId={def.id} />
       <EnvironmentLayers course={course} />
-      <fog attach="fog" args={[fogColor, 220, 1100]} />
     </group>
   )
 }
