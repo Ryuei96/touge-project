@@ -8,6 +8,8 @@ import { BufferAttribute, BufferGeometry, Color, DoubleSide, InstancedMesh, Matr
 import type { BuiltCourse, CollisionShape, MeshData, PlacedAsset } from './types'
 import { createRoadTexture } from './textures'
 import { useGameStore } from '../app/gameStore'
+import { useGarageStore } from '../app/garageStore'
+import { BimModelVisual, GlbAsset } from '../assets/GlbAsset'
 
 function toGeometry(mesh: MeshData): BufferGeometry {
   const g = new BufferGeometry()
@@ -181,26 +183,43 @@ function Assets({ assets }: { assets: PlacedAsset[] }) {
     <group>
       {assets.map((a) => {
         if (a.kind === 'primitive') return <PrimitiveAsset key={a.id} asset={a} />
-        // glb / fbx の読み込みは v0.3 では未実装（README 参照）
+        if (a.kind === 'glb') return <GlbAsset key={a.id} asset={a} />
+        // fbx は Blender で GLB に変換して使う（README 参照）
         return null
       })}
     </group>
   )
 }
 
+/** ユーザーがガレージ画面で配置したモデル（localStorage に保存） */
+function PlacedAssets({ courseId }: { courseId: string }) {
+  const placed = useGarageStore((s) => s.placed[courseId])
+  if (!placed || placed.length === 0) return null
+  return <Assets assets={placed} />
+}
+
 export function CourseScene({ course }: { course: BuiltCourse }) {
   const fogColor = useMemo(() => new Color('#b9cfe0'), [])
+  const def = course.definition
+  const isBim = def.source === 'bim' && def.model
   return (
     <group>
-      <RoadMesh mesh={course.meshes.road} />
+      {isBim && def.model ? (
+        <BimModelVisual uri={def.model.uri} offset={def.model.offset} yaw={def.model.yaw} scale={def.model.scale} upAxis={def.model.upAxis} />
+      ) : (
+        <>
+          <RoadMesh mesh={course.meshes.road} />
+          {course.meshes.guardrails.map((g, i) => (
+            <GuardrailMesh key={i} mesh={g} />
+          ))}
+        </>
+      )}
       {course.meshes.terrain && <TerrainMesh mesh={course.meshes.terrain} />}
-      {course.meshes.guardrails.map((g, i) => (
-        <GuardrailMesh key={i} mesh={g} />
-      ))}
       <CollisionBodies shapes={course.collision} />
       <Trees course={course} />
       <Markers course={course} />
-      <Assets assets={course.definition.assets} />
+      <Assets assets={def.assets} />
+      <PlacedAssets courseId={def.id} />
       <fog attach="fog" args={[fogColor, 150, 900]} />
     </group>
   )

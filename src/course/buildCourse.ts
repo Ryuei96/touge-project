@@ -9,6 +9,8 @@ import { generateGuardrailMesh, generateRoadMesh } from '../road/RoadMeshGenerat
 import { sampleCenterline, sampleIndexAtDistance, type RoadSample } from '../road/spline'
 import { createRoadFollowingHeightField, generateTerrainMesh } from '../road/TerrainMeshGenerator'
 import { generateScenery } from '../scenery/SceneryGenerator'
+import { parseGlb } from '../bim/GlbReader'
+import { importBimModel } from '../bim/BimModelImporter'
 import type { BuiltCourse, CourseDefinition, Marker, Pose } from './types'
 
 function buildMarkers(def: CourseDefinition, samples: RoadSample[]): BuiltCourse['markers'] {
@@ -89,6 +91,44 @@ export function buildCourseFromCenterline(def: CourseDefinition): BuiltCourse {
     markers,
     scenery,
     bounds: { minY, maxY },
+  }
+}
+
+export type BinaryLoader = (uri: string) => Promise<ArrayBuffer>
+
+/**
+ * BIM モデル（GLB）から走行路を取り出してコースを構築する。
+ * 中心線（マーカー・オートパイロット・地形用）は定義側で与える。
+ */
+export async function buildBimCourse(def: CourseDefinition, loadBinary: BinaryLoader): Promise<BuiltCourse> {
+  if (!def.model) throw new Error(`course "${def.id}": source 'bim' requires "model"`)
+  const buffer = await loadBinary(def.model.uri)
+  const glb = parseGlb(buffer)
+  const imported = importBimModel(glb, {
+    drivablePattern: def.model.drivablePattern ? new RegExp(def.model.drivablePattern, 'i') : undefined,
+    scale: def.model.scale,
+    upAxis: def.model.upAxis,
+    offset: def.model.offset,
+    yaw: def.model.yaw,
+  })
+  const samples = sampleCenterline(def.centerline, { step: def.sampleStep ?? 2, defaultWidth: def.defaultWidth, closed: def.closed ?? false })
+  const terrainOpts = def.terrain ?? {}
+  const terrainEnabled = terrainOpts.enabled ?? false
+  const heightField = terrainEnabled ? createRoadFollowingHeightField(samples, terrainOpts) : undefined
+  const terrain = heightField ? generateTerrainMesh(heightField, { resolution: terrainOpts.resolution ?? 96 }) : undefined
+  const collision = [...imported.collision, ...(terrain ? buildCourseCollision({ road: imported.drivable, terrain, guardrails: [] }).filter((c) => c.label === 'terrain') : [])]
+  const markers = buildMarkers(def, samples)
+  const scenery = generateScenery(heightField, samples, { seed: def.scenery?.seed, treeCount: def.scenery?.treeCount ?? 0 })
+  return {
+    definition: def,
+    samples,
+    length: samples[samples.length - 1].distance,
+    meshes: { road: imported.drivable, terrain, guardrails: imported.obstacles ? [imported.obstacles] : [] },
+    collision,
+    heightField,
+    markers,
+    scenery,
+    bounds: { minY: imported.bounds.min[1], maxY: imported.bounds.max[1] },
   }
 }
 

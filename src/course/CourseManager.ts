@@ -4,7 +4,7 @@
  * - geospatial: GeoDataImporter が生成した CourseDefinition（中心線は既にゲーム座標）
  * - bim: 未実装（GLB/FBX の道路・橋梁モデルを読み込む将来機能）
  */
-import { buildCourseFromCenterline } from './buildCourse'
+import { buildBimCourse, buildCourseFromCenterline, type BinaryLoader } from './buildCourse'
 import type { BuiltCourse, CourseDefinition, CourseSource } from './types'
 
 export type CourseBuilder = (def: CourseDefinition) => Promise<BuiltCourse> | BuiltCourse
@@ -73,12 +73,23 @@ export class CourseManager {
   }
 }
 
+/** ブラウザ用: public/ 配下の相対 URI を fetch する */
+export const fetchBinary: BinaryLoader = async (uri) => {
+  const res = await fetch(uri)
+  if (!res.ok) throw new Error(`failed to load ${uri}: ${res.status}`)
+  return res.arrayBuffer()
+}
+
+export interface CourseManagerOptions {
+  /** GLB などのバイナリ読み込み（Node のテストではファイル読み込みに差し替える） */
+  loadBinary?: BinaryLoader
+}
+
 /** 標準ビルダーを備えた CourseManager を作る */
-export function createCourseManager(): CourseManager {
+export function createCourseManager(options: CourseManagerOptions = {}): CourseManager {
+  const loadBinary = options.loadBinary ?? fetchBinary
   return new CourseManager()
     .registerBuilder('procedural', buildCourseFromCenterline)
     .registerBuilder('geospatial', buildCourseFromCenterline)
-    .registerBuilder('bim', () => {
-      throw new CourseSourceNotImplementedError('bim')
-    })
+    .registerBuilder('bim', (def) => buildBimCourse(def, loadBinary))
 }

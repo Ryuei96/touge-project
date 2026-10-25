@@ -41,7 +41,7 @@ describe('CourseManager', () => {
     expect(sep.distance).toBeGreaterThan(40)
   })
 
-  it('throws for unimplemented bim source', async () => {
+  it('rejects a bim course without a model reference', async () => {
     const bim: CourseDefinition = {
       id: 'bim-1',
       name: 'bim',
@@ -57,7 +57,8 @@ describe('CourseManager', () => {
       assets: [],
     }
     const manager = createCourseManager().register(bim)
-    await expect(manager.load('bim-1')).rejects.toBeInstanceOf(CourseSourceNotImplementedError)
+    await expect(manager.load('bim-1')).rejects.toThrow(/requires "model"/)
     expect(() => manager.load('nope')).toThrow(/unknown course/)
+    expect(new CourseSourceNotImplementedError('bim').message).toMatch(/bim/)
   })
 })

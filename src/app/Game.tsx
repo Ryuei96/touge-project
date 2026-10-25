@@ -1,4 +1,4 @@
-import { Canvas } from '@react-three/fiber'
+import { Canvas, useThree } from '@react-three/fiber'
 import { Physics } from '@react-three/rapier'
 import { Sky } from '@react-three/drei'
 import { Suspense, useEffect, useState } from 'react'
@@ -8,6 +8,7 @@ import { CourseScene } from '../course/CourseScene'
 import type { BuiltCourse } from '../course/types'
 import { Vehicle } from '../vehicle/Vehicle'
 import { useGameStore } from './gameStore'
+import { useGarageStore } from './garageStore'
 import { RaceController } from './RaceController'
 import { runtime } from './runtime'
 
@@ -38,11 +39,22 @@ declare global {
   interface Window {
     __touge?: {
       store: typeof useGameStore
+      garage: typeof useGarageStore
       runtime: typeof runtime
       course: BuiltCourse | null
+      scene?: unknown
       requestReset(): void
     }
   }
+}
+
+/** デバッグ用: Three.js シーンを window.__touge に公開 */
+function ExposeScene() {
+  const scene = useThree((s) => s.scene)
+  useEffect(() => {
+    if (window.__touge) window.__touge.scene = scene
+  }, [scene])
+  return null
 }
 
 export function Game() {
@@ -52,6 +64,7 @@ export function Game() {
   useEffect(() => {
     window.__touge = {
       store: useGameStore,
+      garage: useGarageStore,
       runtime,
       course,
       requestReset: () => {
@@ -81,6 +94,7 @@ export function Game() {
         </Suspense>
       )}
       <FollowCamera />
+      <ExposeScene />
     </Canvas>
   )
 }

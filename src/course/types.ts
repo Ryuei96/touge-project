@@ -147,6 +147,21 @@ export interface CourseDefinition {
   collision?: CollisionShape[]
   /** 景観生成のシード・密度 */
   scenery?: { seed?: number; treeCount?: number }
+  /** source = 'bim' のとき: 走行路を含む GLB モデル */
+  model?: BimModelRef
+}
+
+/** BIM/CIM モデル（GLB）の参照と補正 */
+export interface BimModelRef {
+  /** public/ からの相対 URI（例 'models/bim-bridge-course.glb'） */
+  uri: string
+  /** 走行路ノード名の正規表現（文字列）。既定は ^(Road_|Deck_|Pavement_|Lane_) */
+  drivablePattern?: string
+  /** モデル単位 → m の倍率 */
+  scale?: number
+  upAxis?: 'Y' | 'Z'
+  offset?: Vec3
+  yaw?: number
 }
 
 export interface SceneryInstance {

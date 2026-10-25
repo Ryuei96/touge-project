@@ -17,6 +17,10 @@ export function RaceController({ course }: { course: BuiltCourse }) {
     useGameStore.getState().resetRace()
     runtime.respawn = course.markers.start
     runtime.progressIndex = 0
+    runtime.resetRequested = true
+    return () => {
+      runtime.respawn = null
+    }
   }, [course, total])
 
   useFrame((_, dt) => {

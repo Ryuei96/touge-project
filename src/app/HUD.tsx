@@ -1,5 +1,8 @@
+import { useState } from 'react'
 import { courseManager } from '../course'
 import { CAMERA_LABELS, useGameStore } from './gameStore'
+import { GaragePanel } from './GaragePanel'
+import { PlacementPanel } from './PlacementPanel'
 
 function formatTime(t: number): string {
   const m = Math.floor(t / 60)
@@ -7,9 +10,13 @@ function formatTime(t: number): string {
   return `${m}:${s.toFixed(2).padStart(5, '0')}`
 }
 
+type Panel = 'none' | 'garage' | 'place'
+
 export function HUD() {
   const s = useGameStore()
   const courses = courseManager.list()
+  const [panel, setPanel] = useState<Panel>('none')
+  const toggle = (p: Panel) => setPanel((cur) => (cur === p ? 'none' : p))
   return (
     <div className="hud">
       <div className="hud-top-left panel">
@@ -33,6 +40,16 @@ export function HUD() {
         <label className="row small">
           <input type="checkbox" checked={s.autopilot} onChange={(e) => s.setAutopilot(e.target.checked)} /> オートパイロット (P)
         </label>
+        <div className="row">
+          <button className={`mini ${panel === 'garage' ? 'active' : ''}`} onClick={() => toggle('garage')}>
+            ガレージ
+          </button>
+          <button className={`mini ${panel === 'place' ? 'active' : ''}`} onClick={() => toggle('place')}>
+            モデル配置
+          </button>
+        </div>
+        {panel === 'garage' && <GaragePanel />}
+        {panel === 'place' && <PlacementPanel />}
       </div>
 
       <div className="hud-top-right panel">

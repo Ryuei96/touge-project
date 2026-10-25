@@ -11,13 +11,18 @@ import { useGameStore } from '../app/gameStore'
 import { runtime } from '../app/runtime'
 import type { BuiltCourse } from '../course/types'
 import { keyboard, type DriveInput } from '../input/keyboard'
+import { useGarageStore } from '../app/garageStore'
 import { computeAutopilot } from './autopilot'
+import { CarBody } from './CarBody'
+import { getCarPreset, resolveVehicleConfig } from './carCatalog'
 import { RaycastVehicle } from './RaycastVehicle'
 import { DEFAULT_VEHICLE_CONFIG } from './vehicleConfig'
 
-const cfg = DEFAULT_VEHICLE_CONFIG
-
 export function Vehicle({ course }: { course: BuiltCourse }) {
+  const carId = useGarageStore((s) => s.carId)
+  const tuning = useGarageStore((s) => s.tuning)
+  const preset = useMemo(() => getCarPreset(carId), [carId])
+  const cfg = useMemo(() => resolveVehicleConfig(DEFAULT_VEHICLE_CONFIG, preset, tuning), [preset, tuning])
   const bodyRef = useRef<RapierRigidBody>(null)
   const visualRef = useRef<Group>(null)
   const wheelRefs = useRef<(Mesh | null)[]>([null, null, null, null])
@@ -35,9 +40,13 @@ export function Vehicle({ course }: { course: BuiltCourse }) {
     const body = bodyRef.current
     if (!body) return
     const v = new RaycastVehicle(world, body, cfg)
-    v.teleport(start)
-    runtime.respawn = start
-    runtime.progressIndex = 0
+    // 車種変更時は直前の復帰地点から再開、初回はスタート
+    const pose = runtime.respawn ?? start
+    v.teleport(pose)
+    if (!runtime.respawn) {
+      runtime.respawn = start
+      runtime.progressIndex = 0
+    }
     setVehicle(v)
     useGameStore.getState().patch({ physicsReady: true })
     return () => {
@@ -45,7 +54,7 @@ export function Vehicle({ course }: { course: BuiltCourse }) {
       setVehicle(null)
       useGameStore.getState().patch({ physicsReady: false })
     }
-  }, [world, start])
+  }, [world, start, cfg])
 
   useEffect(() => {
     keyboard.attach(window)
@@ -58,16 +67,20 @@ export function Vehicle({ course }: { course: BuiltCourse }) {
 
     if (keyboard.consume('KeyC')) state.cycleCamera()
     if (keyboard.consume('KeyP')) state.setAutopilot(!state.autopilot)
-    if (keyboard.consume('KeyR') || runtime.resetRequested) {
+    if (keyboard.consume('KeyR')) {
       runtime.resetRequested = false
       vehicle.teleport(runtime.respawn ?? start)
       state.patch({ resets: state.resets + 1 })
+    } else if (runtime.resetRequested) {
+      // 内部要求（コース切替・落下）は復帰回数に数えない
+      runtime.resetRequested = false
+      vehicle.teleport(runtime.respawn ?? start)
     }
 
     let input = keyboard.read()
     if (state.autopilot) {
       const r = computeAutopilot(course.samples, runtime.position, runtime.forward, runtime.speedMs, runtime.progressIndex)
-      input = r.input
+      input = state.finished ? { throttle: 0, brake: 1, steer: r.input.steer, handbrake: false } : r.input
     }
     lastInput.current = input
     vehicle.update(input, w.timestep)
@@ -127,32 +140,9 @@ export function Vehicle({ course }: { course: BuiltCourse }) {
       linearDamping={0.02}
       angularDamping={cfg.angularDamping}
     >
-      <CuboidCollider args={[hx, hy, hz]} position={[0, cfg.chassisColliderOffsetY, 0]} mass={cfg.massKg} friction={0.4} restitution={0} />
+      <CuboidCollider key={carId} args={[hx, hy, hz]} position={[0, cfg.chassisColliderOffsetY, 0]} mass={cfg.massKg} friction={0.4} restitution={0} />
       <group ref={visualRef}>
-        {/* ボディ */}
-        <mesh position={[0, 0.05, 0]} castShadow>
-          <boxGeometry args={[hx * 2, hy * 2, hz * 2]} />
-          <meshStandardMaterial color="#d8362f" roughness={0.35} metalness={0.3} />
-        </mesh>
-        {/* キャビン */}
-        <mesh position={[0, hy + 0.3, -0.25]} castShadow>
-          <boxGeometry args={[hx * 1.6, 0.55, 1.9]} />
-          <meshStandardMaterial color="#2b2f36" roughness={0.2} metalness={0.4} />
-        </mesh>
-        {/* ヘッドライト */}
-        <mesh position={[-hx * 0.65, 0.1, hz]}>
-          <boxGeometry args={[0.3, 0.14, 0.06]} />
-          <meshStandardMaterial color="#fff8d0" emissive="#fff2a8" emissiveIntensity={1.5} />
-        </mesh>
-        <mesh position={[hx * 0.65, 0.1, hz]}>
-          <boxGeometry args={[0.3, 0.14, 0.06]} />
-          <meshStandardMaterial color="#fff8d0" emissive="#fff2a8" emissiveIntensity={1.5} />
-        </mesh>
-        {/* テールランプ */}
-        <mesh position={[0, 0.1, -hz]}>
-          <boxGeometry args={[hx * 1.6, 0.12, 0.06]} />
-          <meshStandardMaterial color="#5a0000" emissive="#ff2020" emissiveIntensity={0.8} />
-        </mesh>
+        <CarBody look={preset.look} config={cfg} bodyColor={tuning.bodyColor} />
         {/* ホイール */}
         {[0, 1, 2, 3].map((i) => (
           <mesh
@@ -163,7 +153,7 @@ export function Vehicle({ course }: { course: BuiltCourse }) {
             castShadow
           >
             <cylinderGeometry args={[cfg.wheelRadius, cfg.wheelRadius, cfg.wheelWidth, 18]} onUpdate={(g) => g.rotateZ(Math.PI / 2)} />
-            <meshStandardMaterial color="#1a1a1a" roughness={0.9} />
+            <meshStandardMaterial color={preset.look.wheel} roughness={0.9} />
           </mesh>
         ))}
       </group>
