@@ -3,6 +3,7 @@
  */
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
+import { audioEngine } from '../audio/AudioEngine'
 import type { BuiltCourse } from '../course/types'
 import { pickDialogue, type DialogueEvent } from '../race/dialogue'
 import { nearestSampleIndex, sampleIndexAtDistance } from '../road/spline'
@@ -56,6 +57,7 @@ export function RaceController({ course }: { course: BuiltCourse }) {
 
     if (!s.started && Math.abs(runtime.speedMs) > 0.5) {
       s.patch({ started: true })
+      audioEngine.playSfx('start')
       if (s.rivalEnabled) say('race-start')
     }
     if (s.started && !s.finished) acc.current += dt
@@ -76,11 +78,13 @@ export function RaceController({ course }: { course: BuiltCourse }) {
         if (isGoal) {
           if (closed && runtime.lapIndex + 1 < lapTotal) {
             runtime.lapIndex++
+            audioEngine.playSfx('checkpoint')
             patch = { checkpointIndex: 0, lap: runtime.lapIndex + 1 }
             runtime.respawn = course.markers.start
           } else {
             const rivalAhead = runtime.rival?.finished ?? false
             patch = { finished: true, finishTime: acc.current, checkpointIndex: s.checkpointIndex + 1 }
+            audioEngine.playSfx('finish')
             say(s.rivalEnabled ? (rivalAhead ? 'finish-lose' : 'finish-win') : 'finish-solo')
           }
         } else {
@@ -88,6 +92,7 @@ export function RaceController({ course }: { course: BuiltCourse }) {
           const sample = course.samples[si]
           runtime.respawn = { position: { x: sample.position.x, y: sample.position.y + 0.6, z: sample.position.z }, heading: sample.heading }
           patch = { checkpointIndex: s.checkpointIndex + 1 }
+          audioEngine.playSfx('checkpoint')
           if ((s.checkpointIndex + fired.current.size) % 2 === 0) say(`checkpoint`, false)
         }
       }

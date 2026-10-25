@@ -11,6 +11,7 @@ import type { BuiltCourse, Pose } from '../course/types'
 import { nearestSampleIndex } from '../road/spline'
 import { AutopilotDriver, type AutopilotOptions } from './autopilot'
 import { CarBody } from './CarBody'
+import { WheelMesh } from './WheelMesh'
 import { getCarPreset, resolveVehicleConfig, DEFAULT_TUNING } from './carCatalog'
 import { RaycastVehicle } from './RaycastVehicle'
 import { DEFAULT_VEHICLE_CONFIG } from './vehicleConfig'
@@ -124,15 +125,15 @@ export function RivalVehicle({ course, carId = 'black-gt' }: { course: BuiltCour
       <group ref={visualRef}>
         <CarBody look={preset.look} config={cfg} />
         {[0, 1, 2, 3].map((i) => (
-          <mesh
+          <WheelMesh
             key={i}
             ref={(m) => {
               wheelRefs.current[i] = m
             }}
-          >
-            <cylinderGeometry args={[cfg.wheelRadius, cfg.wheelRadius, cfg.wheelWidth, 18]} onUpdate={(g) => g.rotateZ(Math.PI / 2)} />
-            <meshStandardMaterial color={preset.look.wheel} roughness={0.9} />
-          </mesh>
+            radius={cfg.wheelRadius}
+            width={cfg.wheelWidth}
+            rimColor={preset.look.wheel}
+          />
         ))}
       </group>
     </RigidBody>

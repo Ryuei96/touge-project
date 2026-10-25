@@ -69,8 +69,13 @@ export class RaycastVehicle {
     chassis.setAngularDamping(c.angularDamping)
   }
 
+  get isDisposed(): boolean {
+    return this.disposed
+  }
+
   /** 前進速度 [m/s]（Rapier の報告値） */
   speed(): number {
+    if (this.disposed) return 0
     return this.controller.currentVehicleSpeed()
   }
 
@@ -154,11 +159,13 @@ export class RaycastVehicle {
   }
 
   wheelsInContact(): number {
+    if (this.disposed) return 0
     return this.wheels.filter((w) => w.inContact).length
   }
 
   /** 指定姿勢へ瞬間移動し速度をゼロにする */
   teleport(pose: Pose): void {
+    if (this.disposed) return
     const half = pose.heading / 2
     this.chassis.setTranslation({ x: pose.position.x, y: pose.position.y, z: pose.position.z }, true)
     this.chassis.setRotation({ x: 0, y: Math.sin(half), z: 0, w: Math.cos(half) }, true)

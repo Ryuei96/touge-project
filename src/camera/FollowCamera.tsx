@@ -5,8 +5,8 @@ import { useGameStore, type CameraMode } from '../app/gameStore'
 import { runtime } from '../app/runtime'
 
 const OFFSETS: Record<CameraMode, { back: number; up: number; lookUp: number; lookAhead: number; damp: number }> = {
-  chase: { back: 7.5, up: 2.8, lookUp: 1.0, lookAhead: 3, damp: 5 },
-  far: { back: 14, up: 7, lookUp: 1.2, lookAhead: 6, damp: 4 },
+  chase: { back: 6.4, up: 2.3, lookUp: 0.9, lookAhead: 4, damp: 6 },
+  far: { back: 12, up: 6, lookUp: 1.2, lookAhead: 6, damp: 4 },
   hood: { back: -2.4, up: 0.75, lookUp: 0.7, lookAhead: 14, damp: 60 },
 }
 

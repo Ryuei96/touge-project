@@ -1,6 +1,7 @@
 import { Canvas, useThree } from '@react-three/fiber'
 import { Physics } from '@react-three/rapier'
 import { Sky } from '@react-three/drei'
+import { PostEffects, SceneLighting } from './SceneEffects'
 import { Suspense, useEffect, useState } from 'react'
 import { FollowCamera } from '../camera/FollowCamera'
 import { courseManager } from '../course'
@@ -72,6 +73,7 @@ export function Game() {
   const setupDone = useGameStore((s) => s.setupDone)
   const muted = useGameStore((s) => s.muted)
   const bgmStyle = useGameStore((s) => s.bgmStyle)
+  const postEffects = useGameStore((s) => s.postEffects)
 
   // サウンド: 最初の操作で開始。M でミュート切替
   useEffect(() => {
@@ -117,15 +119,14 @@ export function Game() {
 
   return (
     <Canvas
-      shadows={false}
+      shadows="soft"
       dpr={[1, 1.5]}
       camera={{ fov: 62, near: 0.2, far: 2500, position: [0, 5, 20] }}
-      gl={{ antialias: true, powerPreference: 'high-performance' }}
+      gl={{ antialias: !postEffects, powerPreference: 'high-performance' }}
     >
       <color attach="background" args={['#b9cfe0']} />
-      <Sky distance={450000} sunPosition={[120, 60, -200]} turbidity={6} rayleigh={1.2} />
-      <hemisphereLight args={['#dfe9f5', '#4a5a3a', 0.9]} />
-      <directionalLight position={[120, 160, -120]} intensity={1.6} />
+      <Sky distance={450000} sunPosition={[90, 140, -110]} turbidity={4} rayleigh={1.6} mieCoefficient={0.004} mieDirectionalG={0.85} />
+      <SceneLighting />
       {course && (
         <Suspense fallback={null}>
           <Physics key={course.definition.id} timeStep={1 / 60} gravity={[0, -9.81, 0]} interpolate updatePriority={-1}>
@@ -138,6 +139,7 @@ export function Game() {
       )}
       <FollowCamera />
       <ExposeScene />
+      <PostEffects enabled={postEffects} />
     </Canvas>
   )
 }

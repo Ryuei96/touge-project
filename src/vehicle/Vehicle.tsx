@@ -15,6 +15,7 @@ import { useGarageStore } from '../app/garageStore'
 import { audioEngine } from '../audio/AudioEngine'
 import { AutopilotDriver } from './autopilot'
 import { CarBody } from './CarBody'
+import { WheelMesh } from './WheelMesh'
 import { getCarPreset, resolveVehicleConfig } from './carCatalog'
 import { RaycastVehicle } from './RaycastVehicle'
 import { DEFAULT_VEHICLE_CONFIG } from './vehicleConfig'
@@ -35,6 +36,14 @@ export function Vehicle({ course }: { course: BuiltCourse }) {
   const tmpVel = useMemo(() => new Vector3(), [])
   const lastInput = useRef<DriveInput>({ throttle: 0, brake: 0, steer: 0, handbrake: false })
   const driver = useRef(new AutopilotDriver())
+  const [braking, setBraking] = useState(false)
+  const lastHit = useRef(0)
+  const onHit = (force: number) => {
+    const now = performance.now()
+    if (force < 1500 || now - lastHit.current < 400) return
+    lastHit.current = now
+    audioEngine.playSfx('collision')
+  }
 
   const start = course.markers.start
 
@@ -132,6 +141,8 @@ export function Vehicle({ course }: { course: BuiltCourse }) {
     hudTimer.current += dt
     if (hudTimer.current > 0.1) {
       hudTimer.current = 0
+      const b = lastInput.current.brake > 0 || lastInput.current.handbrake
+      if (b !== braking) setBraking(b)
       useGameStore.getState().patch({
         speedKmh: Math.abs(runtime.speedMs) * 3.6,
         gear: vehicle.gear,
@@ -152,21 +163,28 @@ export function Vehicle({ course }: { course: BuiltCourse }) {
       linearDamping={0.02}
       angularDamping={cfg.angularDamping}
     >
-      <CuboidCollider key={carId} args={[hx, hy, hz]} position={[0, cfg.chassisColliderOffsetY, 0]} mass={cfg.massKg} friction={0.4} restitution={0} />
+      <CuboidCollider
+        key={carId}
+        args={[hx, hy, hz]}
+        position={[0, cfg.chassisColliderOffsetY, 0]}
+        mass={cfg.massKg}
+        friction={0.4}
+        restitution={0}
+        onContactForce={(e) => onHit(e.totalForceMagnitude)}
+      />
       <group ref={visualRef}>
-        <CarBody look={preset.look} config={cfg} bodyColor={tuning.bodyColor} />
+        <CarBody look={preset.look} config={cfg} bodyColor={tuning.bodyColor} wing={tuning.parts.aero === 'wing'} braking={braking} />
         {/* ホイール */}
         {[0, 1, 2, 3].map((i) => (
-          <mesh
+          <WheelMesh
             key={i}
             ref={(m) => {
               wheelRefs.current[i] = m
             }}
-            castShadow
-          >
-            <cylinderGeometry args={[cfg.wheelRadius, cfg.wheelRadius, cfg.wheelWidth, 18]} onUpdate={(g) => g.rotateZ(Math.PI / 2)} />
-            <meshStandardMaterial color={preset.look.wheel} roughness={0.9} />
-          </mesh>
+            radius={cfg.wheelRadius}
+            width={cfg.wheelWidth}
+            rimColor={preset.look.wheel}
+          />
         ))}
       </group>
     </RigidBody>
