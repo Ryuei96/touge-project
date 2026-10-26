@@ -12,16 +12,35 @@ blender --background --python tools/blender/make_sample_assets.py -- public/mode
 
 ## BlenderMCP（Claude Code から Blender を操作する）
 
-リポジトリ直下の `.mcp.json` に `blender` サーバー（`uvx blender-mcp`）を登録している。
-ローカル PC で使うには次の準備が必要（クラウドのヘッドレス環境では GUI の Blender が無いため動かない）。
+リポジトリ直下の `.mcp.json` に `blender` サーバー（`uvx blender-mcp`、ahujasid/blender-mcp）を登録している。
+Blender は手元の PC で GUI 起動している必要があるため、**ローカルで Claude Code（CLI またはデスクトップアプリ）をこのリポジトリで起動して使う**。
+クラウド（claude.ai/code）のセッションからは手元の Blender に到達できない。
 
-1. Blender 3.0 以降をインストールする。
-2. `uv` をインストールする（`curl -LsSf https://astral.sh/uv/install.sh | sh` または `pip install uv`）。
-3. https://github.com/ahujasid/blender-mcp から `addon.py` を取得し、Blender の
-   Edit > Preferences > Add-ons > Install でアドオンとして入れ、「Interface: Blender MCP」を有効化する。
-4. Blender の 3D ビューポートのサイドバー（N キー）> BlenderMCP タブ > Connect to Claude を押す。
-5. Claude Code をこのリポジトリで起動すると `.mcp.json` の `blender` サーバーが有効になる
-   （初回は許可を求められる）。`/mcp` で接続状態を確認できる。
+動作確認: 本リポジトリのスクリプトは Blender 4.0.2（ヘッドレス）で検証。Blender 5.2 LTS で削除された
+`use_auto_smooth` には対応済み（4.1 以降は「角度でスムーズ」オペレータを使う）が、5.2 での実行は未検証。
+
+### 手順（Blender 5.2 LTS）
+
+1. `uv` を入れる: Windows は `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"`、macOS/Linux は `curl -LsSf https://astral.sh/uv/install.sh | sh`。
+2. https://github.com/ahujasid/blender-mcp の `addon.py` をダウンロードし、Blender の
+   Edit > Preferences > Add-ons > 右上の ∨ > Install from Disk… で入れて「Interface: Blender MCP」を有効化する。
+3. 3D ビューポートでサイドバー（N キー）> BlenderMCP タブ > **Connect to Claude**（ポート 9876 で待受）。
+4. リポジトリのフォルダで `claude` を起動。`.mcp.json` のサーバーを使うか聞かれるので許可する。`/mcp` で `blender` が connected なら OK。
+5. 例: 「`tools/blender/make_cars.py` の hatch を Blender に読み込んで、屋根をもう少し低くして `public/models/cars/hatch.glb` に書き出して」
+   のように頼むと、Claude が `execute_blender_code` でスクリプトを流し、`get_viewport_screenshot` で見た目を確認しながら調整できる。
+
+Poly Haven の無料アセット（HDRI・テクスチャ・小物）はアドオンの設定で「Use assets from Poly Haven」をオンにすると
+Claude から検索・配置できる。Sketchfab / Hyper3D は各サービスの API キーが必要。
+
+### もう一つの選択肢: MCP for Blender（Claude デスクトップアプリ用）
+
+Claude デスクトップアプリ（Cowork）のコネクタに「Blender」がある場合はそちらでも動く。アドオンは
+`uvx mcp-for-blender install-addon` で入れ、Blender 側で有効化する。どちらか一方を使えばよい。
+
+### ヘッドレスだけで済ませる場合
+
+GUI も MCP も使わず、`blender --background --python tools/blender/make_cars.py -- public/models/cars` で
+車体 GLB を再生成できる（現在のアセットはこの方法で作っている）。
 
 ## モデル命名規約（BimModelImporter が参照）
 

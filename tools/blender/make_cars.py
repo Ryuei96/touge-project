@@ -57,6 +57,24 @@ def interp(points, y):
     return points[-1][1]
 
 
+def smooth_by_angle(obj, angle):
+    """Blender 4.0 の use_auto_smooth と、4.1〜5.x の shade_smooth_by_angle / shade_auto_smooth の両方に対応"""
+    me = obj.data
+    if hasattr(me, "use_auto_smooth"):
+        me.use_auto_smooth = True
+        me.auto_smooth_angle = angle
+        return
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    for op_name in ("shade_smooth_by_angle", "shade_auto_smooth"):
+        op = getattr(bpy.ops.object, op_name, None)
+        if op is not None:
+            op(angle=angle)
+            return
+    # どちらも無ければ通常のスムーズのまま（glTF 書き出し時に法線は頂点法線になる）
+
+
 def add_box(name, size, loc, mat, rot=(0, 0, 0), parent=None):
     bpy.ops.mesh.primitive_cube_add(size=1, location=loc, rotation=rot)
     o = bpy.context.active_object
@@ -199,9 +217,8 @@ def build_car(spec):
         p.use_smooth = True
     body = bpy.data.objects.new("Body", me)
     bpy.context.collection.objects.link(body)
-    # 自動スムーズ（折れ目を保つ）
-    me.use_auto_smooth = True
-    me.auto_smooth_angle = math.radians(38)
+    # 自動スムーズ（折れ目を保つ）。Blender 4.0 以前はメッシュ属性、4.1 以降は「角度でスムーズ」モディファイア
+    smooth_by_angle(body, math.radians(38))
 
     # ランプ・グリル・ミラー・マフラー
     w_front = interp(width, -hl + 0.05)
