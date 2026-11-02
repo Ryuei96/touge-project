@@ -6,6 +6,7 @@ import { persist } from 'zustand/middleware'
 import type { PlacedAsset } from '../course/types'
 import { DEFAULT_CAR_ID, DEFAULT_TUNING, type CarTuning, type PartCategory } from '../vehicle/carCatalog'
 import { DEFAULT_CHARACTERS, DEFAULT_RIVALS, type Character, type RivalEntry } from '../race/characters'
+import type { Transmission } from '../vehicle/drivetrain'
 
 export interface GarageState {
   carId: string
@@ -20,6 +21,10 @@ export interface GarageState {
   /** アーケードのプレイヤー登録名（ランキングに残る） */
   playerName: string
   setPlayerName(name: string): void
+  /** 変速: auto（AT）/ manual（パドル・シフター）。ハンコン接続時に未設定なら manual になる */
+  transmission: Transmission
+  transmissionSet: boolean
+  setTransmission(mode: Transmission, explicit?: boolean): void
   setCar(id: string): void
   setTuning(partial: Partial<CarTuning>): void
   setPart(category: PartCategory, id: string): void
@@ -46,6 +51,9 @@ export const useGarageStore = create<GarageState>()(
       rivals: DEFAULT_RIVALS,
       playerName: 'PLAYER',
       setPlayerName: (name) => set({ playerName: name.slice(0, 10) }),
+      transmission: 'auto',
+      transmissionSet: false,
+      setTransmission: (mode, explicit = true) => set((s) => ({ transmission: mode, transmissionSet: s.transmissionSet || explicit })),
       updateCharacter: (id, partial) => set((s) => ({ characters: s.characters.map((c) => (c.id === id ? { ...c, ...partial, avatar: { ...c.avatar, ...(partial.avatar ?? {}) } } : c)) })),
       setPlayerCharacter: (id) => set({ playerCharacterId: id }),
       setNavigator: (id) => set({ navigatorCharacterId: id }),

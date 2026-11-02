@@ -1,6 +1,6 @@
 /**
  * キーボード入力。
- * W/S: アクセル・ブレーキ, A/D: ステア, Space: サイドブレーキ, R: 復帰, C: カメラ切替。
+ * W/S: アクセル・ブレーキ, A/D: ステア, Space: サイドブレーキ, R: 復帰, C: カメラ切替, E/Q: シフトアップ/ダウン（MT 時）。
  * 矢印キーも同等に扱う。
  */
 export interface DriveInput {
@@ -11,6 +11,13 @@ export interface DriveInput {
   /** -1 (左) .. +1 (右) */
   steer: number
   handbrake: boolean
+  /** クラッチ 0..1（ハンコン） */
+  clutch?: number
+  /** シフト操作のエッジ（MT 時） */
+  shiftUp?: boolean
+  shiftDown?: boolean
+  /** H パターンシフター等の絶対指定（-1 R, 0 N, 1..6）。無ければ null / undefined */
+  gearSelect?: number | null
 }
 
 export const EMPTY_INPUT: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false }
@@ -81,6 +88,8 @@ export class KeyboardInput {
       brake: dn ? 1 : 0,
       steer: (rt ? 1 : 0) - (lf ? 1 : 0),
       handbrake: this.isDown('Space'),
+      shiftUp: this.consume('KeyE'),
+      shiftDown: this.consume('KeyQ'),
     }
   }
 }

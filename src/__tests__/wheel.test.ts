@@ -61,3 +61,32 @@ describe('wheel', () => {
     expect(loadWheelSettings(storage).mapping).toEqual(DEFAULT_LOGITECH_MAPPING)
   })
 })
+
+describe('wheel pedal rest estimation', () => {
+  it('treats an untouched axis (Chrome reports 0) as released, not half pressed', async () => {
+    const { observeAxes } = await import('../input/wheel')
+    const observed = { min: [], max: [] }
+    observeAxes(observed, [0, 0, 0, 0])
+    const m = { ...DEFAULT_LOGITECH_MAPPING, linearity: 1 }
+    const rest = readWheel(fakePad([0, 0, 0, 0]), m, observed)
+    expect(rest.brake).toBe(0)
+    expect(rest.throttle).toBe(0)
+    // 一度踏んで離すと +1 が休止値になる
+    observeAxes(observed, [0, 1, -1, 1])
+    observeAxes(observed, [0, 1, 1, 1])
+    expect(readWheel(fakePad([0, 1, 1, 1]), m, observed).brake).toBe(0)
+    expect(readWheel(fakePad([0, 1, -1, 1]), m, observed).brake).toBe(1)
+    expect(readWheel(fakePad([0, 1, 0, 1]), m, observed).brake).toBeCloseTo(0.5)
+  })
+
+  it('uses calibrated rest values verbatim and reads clutch and H-shifter', () => {
+    const m = { ...DEFAULT_LOGITECH_MAPPING, linearity: 1, brake: { axis: 2, rest: 1, pressed: -1, calibrated: true }, buttons: { ...DEFAULT_LOGITECH_MAPPING.buttons, gear3: 14, gearR: 18 } }
+    const observed = { min: [0, 0, 0, 0], max: [0, 0, 0, 0] }
+    expect(readWheel(fakePad([0, 1, 0, 1]), m, observed).brake).toBeCloseTo(0.5)
+    expect(readWheel(fakePad([0, 1, 1, -1]), m).clutch).toBe(1)
+    expect(readWheel(fakePad([0, 1, 1, 1]), m).gearSelect).toBe(0)
+    expect(readWheel(fakePad([0, 1, 1, 1], [14]), m).gearSelect).toBe(3)
+    expect(readWheel(fakePad([0, 1, 1, 1], [18]), m).gearSelect).toBe(-1)
+    expect(readWheel(fakePad([0, 1, 1, 1]), DEFAULT_LOGITECH_MAPPING).gearSelect).toBeNull()
+  })
+})

@@ -6,6 +6,7 @@
 import { useEffect } from 'react'
 import { gamepad } from '../input/gamepad'
 import { useGameStore } from './gameStore'
+import { useGarageStore } from './garageStore'
 import { runtime } from './runtime'
 
 export function GamepadBridge() {
@@ -16,7 +17,11 @@ export function GamepadBridge() {
       const s = useGameStore.getState()
       const connected = gamepad.connected
       const kind = gamepad.kind
-      if (connected !== s.gamepadConnected || kind !== s.inputKind) s.patch({ gamepadConnected: connected, gamepadId: gamepad.id ?? undefined, inputKind: kind })
+      if (connected !== s.gamepadConnected || kind !== s.inputKind) {
+        s.patch({ gamepadConnected: connected, gamepadId: gamepad.id ?? undefined, inputKind: kind })
+        const g = useGarageStore.getState()
+        if (kind === 'wheel' && !g.transmissionSet) g.setTransmission('manual', false)
+      }
       if (connected) {
         if (gamepad.consume('confirm')) {
           if (s.intro) document.querySelector<HTMLButtonElement>('.conversation-actions .mini')?.click()

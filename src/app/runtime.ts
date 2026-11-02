@@ -23,6 +23,9 @@ export interface VehicleRuntime {
   lapIndex: number
   /** 直近の入力（サウンド用） */
   throttle: number
+  /** 表示用ギアと回転数（駆動系から） */
+  gear: string
+  rpm: number
   handbrake: boolean
   /** ライバル車（0 台以上） */
   rivals: RivalRuntime[]
@@ -58,6 +61,8 @@ export const runtime: VehicleRuntime = {
   progressIndex: 0,
   lapIndex: 0,
   throttle: 0,
+  gear: '1',
+  rpm: 900,
   handbrake: false,
   rivals: [],
   course: null,

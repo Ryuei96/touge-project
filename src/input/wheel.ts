@@ -15,9 +15,27 @@ export interface AxisMap {
   rest: number
   /** いっぱいに踏んだ時の値 */
   pressed: number
+  /** 画面で校正した値か（false なら観測した端の値を休止値として使う） */
+  calibrated?: boolean
 }
 
-export type WheelButton = 'confirm' | 'handbrake' | 'reset' | 'camera' | 'options' | 'shiftUp' | 'shiftDown'
+/** 接続後に観測した各軸の最小・最大値（Chrome は触っていない軸を 0 と報告するため、休止値の推定に使う） */
+export interface AxisObserved {
+  min: number[]
+  max: number[]
+}
+
+export type WheelButton = 'confirm' | 'handbrake' | 'reset' | 'camera' | 'options' | 'shiftUp' | 'shiftDown' | 'gear1' | 'gear2' | 'gear3' | 'gear4' | 'gear5' | 'gear6' | 'gearR'
+
+export const GEAR_BUTTONS: { name: WheelButton; gear: number }[] = [
+  { name: 'gear1', gear: 1 },
+  { name: 'gear2', gear: 2 },
+  { name: 'gear3', gear: 3 },
+  { name: 'gear4', gear: 4 },
+  { name: 'gear5', gear: 5 },
+  { name: 'gear6', gear: 6 },
+  { name: 'gearR', gear: -1 },
+]
 
 export interface WheelMapping {
   /** ステア軸 */
@@ -45,7 +63,7 @@ export const DEFAULT_LOGITECH_MAPPING: WheelMapping = {
   throttle: { axis: 1, rest: 1, pressed: -1 },
   brake: { axis: 2, rest: 1, pressed: -1 },
   clutch: { axis: 3, rest: 1, pressed: -1 },
-  buttons: { confirm: 0, handbrake: 1, camera: 2, reset: 3, options: 9, shiftUp: 4, shiftDown: 5 },
+  buttons: { confirm: 0, handbrake: 1, camera: 2, reset: 3, options: 9, shiftUp: 4, shiftDown: 5, gear1: -1, gear2: -1, gear3: -1, gear4: -1, gear5: -1, gear6: -1, gearR: -1 },
 }
 
 const WHEEL_ID_PATTERN = /G923|G29|G920|G27|G25|Driving Force|Racing Wheel|Thrustmaster|T300|T150|T248|T500|TMX|TX Racing|Fanatec|CSL|Moza|Simucube|c24f|c260|c266|c26d|c26e|c29b|c298|c299|c294|c295/i
@@ -59,12 +77,34 @@ export function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v
 }
 
+/**
+ * 休止値。校正済みなら設定値、そうでなければ観測した端（休止側）の値を使う。
+ * Chrome は一度も動いていない軸を 0 と報告するので、設定値 +1 をそのまま使うと「半分踏んでいる」扱いになり、
+ * ブレーキなら停車中に勝手に後退してしまう。観測値を使えば未操作 = 0 = 休止になる。
+ */
+export function effectiveRest(map: AxisMap, observed?: AxisObserved | null): number {
+  if (map.calibrated || !observed) return map.rest
+  const restIsHigh = map.rest >= map.pressed
+  const v = restIsHigh ? observed.max[map.axis] : observed.min[map.axis]
+  return v === undefined ? map.rest : v
+}
+
 /** ペダル軸の生値を 0..1 に正規化（rest → 0、pressed → 1） */
-export function pedalValue(raw: number, map: AxisMap): number {
-  const span = map.pressed - map.rest
+export function pedalValue(raw: number, map: AxisMap, observed?: AxisObserved | null): number {
+  const rest = effectiveRest(map, observed)
+  const span = map.pressed - rest
   if (Math.abs(span) < 1e-6) return 0
-  const v = clamp01((raw - map.rest) / span)
+  const v = clamp01((raw - rest) / span)
   return v < 0.03 ? 0 : v
+}
+
+/** 観測レンジを更新（新しい機器では reset する） */
+export function observeAxes(observed: AxisObserved, axes: ArrayLike<number>): void {
+  for (let i = 0; i < axes.length; i++) {
+    const v = axes[i]
+    if (observed.min[i] === undefined || v < observed.min[i]) observed.min[i] = v
+    if (observed.max[i] === undefined || v > observed.max[i]) observed.max[i] = v
+  }
 }
 
 /** ステア軸の生値（-1..1 = 全回転）を、ロック角に合わせてゲームの -1..1 へ */
@@ -86,14 +126,31 @@ export function buttonDown(pad: Gamepad, index: number): boolean {
   return b.pressed || b.value > 0.5
 }
 
-/** ハンコンの生値から走行入力へ */
-export function readWheel(pad: Gamepad, m: WheelMapping): DriveInput {
+/** H シフターのギアボタンが 1 つでも割り当てられているか */
+export function hasGearButtons(m: WheelMapping): boolean {
+  return GEAR_BUTTONS.some((g) => m.buttons[g.name] >= 0)
+}
+
+/** H シフターの選択ギア。割当が無ければ null、割当があって何も入っていなければ 0 (N) */
+export function selectedGear(pad: Gamepad, m: WheelMapping): number | null {
+  if (!hasGearButtons(m)) return null
+  for (const g of GEAR_BUTTONS) {
+    const idx = m.buttons[g.name]
+    if (idx >= 0 && buttonDown(pad, idx)) return g.gear
+  }
+  return 0
+}
+
+/** ハンコンの生値から走行入力へ（シフトのエッジは呼び出し側で付ける） */
+export function readWheel(pad: Gamepad, m: WheelMapping, observed?: AxisObserved | null): DriveInput {
   const axes = pad.axes
   return {
-    throttle: pedalValue(axes[m.throttle.axis] ?? m.throttle.rest, m.throttle),
-    brake: pedalValue(axes[m.brake.axis] ?? m.brake.rest, m.brake),
+    throttle: pedalValue(axes[m.throttle.axis] ?? m.throttle.rest, m.throttle, observed),
+    brake: pedalValue(axes[m.brake.axis] ?? m.brake.rest, m.brake, observed),
     steer: steerValue(axes[m.steerAxis] ?? 0, m),
     handbrake: buttonDown(pad, m.buttons.handbrake),
+    clutch: m.clutch ? pedalValue(axes[m.clutch.axis] ?? m.clutch.rest, m.clutch, observed) : 0,
+    gearSelect: selectedGear(pad, m),
   }
 }
 

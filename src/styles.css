@@ -183,3 +183,4 @@ table.records tr.me td { background: rgba(245,197,66,0.14); }
 .calib-grid .mini { text-align: left; }
 .calib-msg { min-height: 1.4em; color: #7fe8ff; }
 .wheel-panel input[type=range] { flex: 1; }
+.warn { color: #ffb84d; }

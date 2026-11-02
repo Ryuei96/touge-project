@@ -4,13 +4,31 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { gamepad } from '../input/gamepad'
-import { DEFAULT_LOGITECH_MAPPING, detectChangedAxis, detectPressedButton, readWheel, type WheelButton, type WheelMapping } from '../input/wheel'
+import { DEFAULT_LOGITECH_MAPPING, GEAR_BUTTONS, detectChangedAxis, detectPressedButton, readWheel, type AxisMap, type WheelButton, type WheelMapping } from '../input/wheel'
+import { useGarageStore } from './garageStore'
+import { runtime } from './runtime'
 
 type AxisTarget = 'steer' | 'throttle' | 'brake' | 'clutch'
 type Step = { kind: 'axis'; target: AxisTarget } | { kind: 'button'; target: WheelButton } | null
 
 const AXIS_LABEL: Record<AxisTarget, string> = { steer: 'ハンドルを右いっぱいに切る', throttle: 'アクセルをいっぱいに踏む', brake: 'ブレーキをいっぱいに踏む', clutch: 'クラッチをいっぱいに踏む' }
-const BUTTON_LABEL: Record<WheelButton, string> = { confirm: '決定（走り出す・会話送り）', handbrake: 'サイドブレーキ', reset: '復帰', camera: 'カメラ切替', options: 'セットアップ画面', shiftUp: 'シフトアップ（右パドル）', shiftDown: 'シフトダウン（左パドル）' }
+const BUTTON_LABEL: Record<WheelButton, string> = {
+  confirm: '決定（走り出す・会話送り）',
+  handbrake: 'サイドブレーキ',
+  reset: '復帰',
+  camera: 'カメラ切替',
+  options: 'セットアップ画面',
+  shiftUp: 'シフトアップ（右パドル）',
+  shiftDown: 'シフトダウン（左パドル）',
+  gear1: 'シフター 1 速',
+  gear2: 'シフター 2 速',
+  gear3: 'シフター 3 速',
+  gear4: 'シフター 4 速',
+  gear5: 'シフター 5 速',
+  gear6: 'シフター 6 速',
+  gearR: 'シフター R',
+}
+const MAIN_BUTTONS: WheelButton[] = ['confirm', 'handbrake', 'reset', 'camera', 'options', 'shiftUp', 'shiftDown']
 
 export function WheelPanel() {
   const [snap, setSnap] = useState(gamepad.rawSnapshot())
@@ -18,6 +36,8 @@ export function WheelPanel() {
   const [force, setForce] = useState(gamepad.wheel.forceWheel)
   const [step, setStep] = useState<Step>(null)
   const [message, setMessage] = useState('')
+  const transmission = useGarageStore((g) => g.transmission)
+  const setTransmission = useGarageStore((g) => g.setTransmission)
   const baseline = useRef<{ axes: number[]; buttons: boolean[] } | null>(null)
   const stepRef = useRef<Step>(null)
   useEffect(() => {
@@ -40,7 +60,7 @@ export function WheelPanel() {
             next.steerAxis = hit.axis
             next.steerInvert = hit.to < hit.from // 右に切って負になるなら反転
           } else {
-            const am = { axis: hit.axis, rest: hit.from, pressed: hit.to }
+            const am: AxisMap = { axis: hit.axis, rest: hit.from, pressed: hit.to, calibrated: true }
             if (st.target === 'throttle') next.throttle = am
             else if (st.target === 'brake') next.brake = am
             else next.clutch = am
@@ -73,7 +93,20 @@ export function WheelPanel() {
     setStep(s)
   }
 
-  const live = snap && gamepad.kind === 'wheel' ? readWheel({ axes: snap.axes, buttons: snap.buttons.map((p) => ({ pressed: p, touched: p, value: p ? 1 : 0 })) } as unknown as Gamepad, mapping) : null
+  const live = snap && gamepad.kind === 'wheel' ? readWheel({ axes: snap.axes, buttons: snap.buttons.map((p) => ({ pressed: p, touched: p, value: p ? 1 : 0 })) } as unknown as Gamepad, mapping, gamepad.observed) : null
+
+  /** 今のペダル位置を「離した状態」として記憶（踏んだ側は反対の端と仮定） */
+  const restNow = () => {
+    const cur = gamepad.rawSnapshot()
+    if (!cur) return
+    const fix = (m: AxisMap | null): AxisMap | null => {
+      if (!m) return null
+      const rest = cur.axes[m.axis] ?? m.rest
+      return { axis: m.axis, rest, pressed: rest > 0 ? -1 : 1, calibrated: true }
+    }
+    setMapping((m) => ({ ...m, throttle: fix(m.throttle)!, brake: fix(m.brake)!, clutch: fix(m.clutch) }))
+    setMessage('今の位置をペダルの休止値として記憶しました')
+  }
 
   return (
     <div className="wheel-panel">
@@ -111,10 +144,17 @@ export function WheelPanel() {
             {snap.buttons.every((b) => !b) && <span className="dim">（押されていません）</span>}
           </div>
           {live && (
-            <div className="small">
-              → ゲーム入力: ステア {live.steer.toFixed(2)} ・ アクセル {live.throttle.toFixed(2)} ・ ブレーキ {live.brake.toFixed(2)} ・ サイド {live.handbrake ? 'ON' : 'OFF'}
+            <div className={`small ${live.brake > 0 || live.throttle > 0 ? 'warn' : ''}`}>
+              → ゲーム入力: ステア {live.steer.toFixed(2)} ・ アクセル {live.throttle.toFixed(2)} ・ ブレーキ {live.brake.toFixed(2)} ・ クラッチ {(live.clutch ?? 0).toFixed(2)} ・ サイド {live.handbrake ? 'ON' : 'OFF'} ・ ギア {runtime.gear}
+              {live.gearSelect !== null && live.gearSelect !== undefined && ` ・ シフター ${live.gearSelect === -1 ? 'R' : live.gearSelect === 0 ? 'N' : live.gearSelect}`}
             </div>
           )}
+          <div className="row">
+            <button className="mini" onClick={restNow}>
+              ペダルから足を離した状態で押す（休止値を記憶）
+            </button>
+            <span className="small dim">足を離してもアクセル/ブレーキが 0 にならない時に</span>
+          </div>
         </div>
       )}
 
@@ -125,13 +165,39 @@ export function WheelPanel() {
             {AXIS_LABEL[t]}
           </button>
         ))}
-        {(Object.keys(BUTTON_LABEL) as WheelButton[]).map((t) => (
+        {MAIN_BUTTONS.map((t) => (
           <button key={t} className={`mini ${step?.kind === 'button' && step.target === t ? 'active' : ''}`} onClick={() => begin({ kind: 'button', target: t })} disabled={!snap}>
             {BUTTON_LABEL[t]}（{mapping.buttons[t]}）
           </button>
         ))}
       </div>
       <div className="small calib-msg">{step ? '待機中… 操作してください' : message}</div>
+
+      <div className="subtitle">変速</div>
+      <div className="row small">
+        {(
+          [
+            ['manual', 'MT（パドル / シフター / クラッチ）'],
+            ['auto', 'AT（停車中にブレーキで後退）'],
+          ] as const
+        ).map(([id, label]) => (
+          <button key={id} className={`mini ${transmission === id ? 'active' : ''}`} onClick={() => setTransmission(id)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="small dim">MT: 右パドルでアップ、左パドルでダウン（1 → N → R は停車時のみ）。クラッチを踏むと駆動が切れる。レッドラインで駆動カット。</div>
+      <div className="subtitle">H パターンシフター（Driving Force Shifter 等。使わなければ未設定のまま）</div>
+      <div className="calib-grid">
+        {GEAR_BUTTONS.map(({ name }) => (
+          <button key={name} className={`mini ${step?.kind === 'button' && step.target === name ? 'active' : ''}`} onClick={() => begin({ kind: 'button', target: name })} disabled={!snap}>
+            {BUTTON_LABEL[name]}（{mapping.buttons[name] < 0 ? '未設定' : mapping.buttons[name]}）
+          </button>
+        ))}
+        <button className="mini" onClick={() => setMapping((m) => ({ ...m, buttons: { ...m.buttons, gear1: -1, gear2: -1, gear3: -1, gear4: -1, gear5: -1, gear6: -1, gearR: -1 } }))}>
+          シフター設定を消す
+        </button>
+      </div>
 
       <div className="subtitle">ステアリング</div>
       <label className="row small">
@@ -162,7 +228,7 @@ export function WheelPanel() {
           既定値に戻す（Logitech）
         </button>
       </div>
-      <div className="small dim">フォースフィードバックはブラウザの Gamepad API では扱えません。G HUB 側のセンタリングスプリングが効きます。</div>
+      <div className="small dim">G HUB のペダル設定は「分離（Separate）」にしてください。「結合（Combined）」だとアクセルとブレーキが 1 軸になり正しく読めません。フォースフィードバックはブラウザの Gamepad API では扱えません（G HUB のセンタリングスプリングが効きます）。</div>
     </div>
   )
 }

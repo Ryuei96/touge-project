@@ -8,11 +8,11 @@ import { CuboidCollider, RigidBody, useBeforePhysicsStep, useRapier, type Rapier
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Group, Mesh, Quaternion, Vector3 } from 'three'
 import { useGameStore } from '../app/gameStore'
+import { useGarageStore } from '../app/garageStore'
 import { runtime } from '../app/runtime'
 import type { BuiltCourse } from '../course/types'
 import { keyboard, type DriveInput } from '../input/keyboard'
 import { gamepad, mergeInputs } from '../input/gamepad'
-import { useGarageStore } from '../app/garageStore'
 import { audioEngine } from '../audio/AudioEngine'
 import { AutopilotDriver } from './autopilot'
 import { CarBody } from './CarBody'
@@ -84,6 +84,7 @@ export function Vehicle({ course }: { course: BuiltCourse }) {
 
     if (keyboard.consume('KeyC')) state.cycleCamera()
     if (keyboard.consume('KeyP')) state.setAutopilot(!state.autopilot)
+    vehicle.drivetrain.setMode(state.autopilot ? 'auto' : useGarageStore.getState().transmission)
     if (keyboard.consume('KeyR')) {
       runtime.resetRequested = false
       vehicle.teleport(runtime.respawn ?? start)
@@ -130,11 +131,13 @@ export function Vehicle({ course }: { course: BuiltCourse }) {
     runtime.velocity.copy(tmpVel)
     runtime.speedMs = tmpVel.dot(tmpForward)
     runtime.wheelsOnGround = vehicle.wheelsInContact()
+    runtime.gear = vehicle.gear
+    runtime.rpm = vehicle.rpm
 
     // サウンド: 横滑り量とサイドブレーキからスキール強度を出す
     const lateral = Math.abs(tmpVel.x * tmpForward.z - tmpVel.z * tmpForward.x)
     const skid = Math.min(1, lateral / 6) + (runtime.handbrake && Math.abs(runtime.speedMs) > 3 ? 0.5 : 0)
-    audioEngine.update({ throttle: runtime.throttle, speedMs: Math.abs(runtime.speedMs), maxSpeedMs: cfg.maxSpeed, skid, wheelsOnGround: runtime.wheelsOnGround })
+    audioEngine.update({ throttle: runtime.throttle, speedMs: Math.abs(runtime.speedMs), maxSpeedMs: cfg.maxSpeed, skid, wheelsOnGround: runtime.wheelsOnGround, rpm: vehicle.rpm, gear: vehicle.drivetrain.gear })
     // 振動: スキール中は弱く連続、エンジン回転に応じた微振動
     rumbleTimer.current += dt
     if (rumbleTimer.current > 0.1) {

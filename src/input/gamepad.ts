@@ -3,14 +3,14 @@
  * ハンドルコントローラー（G923 等）は wheel.ts のマッピングで読む（isWheel で判定）。
  *
  *   左スティック X : ステア        R2 (buttons[7]) : アクセル（アナログ）
- *   L2 (buttons[6]) : ブレーキ     □ / X (buttons[2]) : サイドブレーキ
+ *   L2 (buttons[6]) : ブレーキ     □ / X (buttons[2]) : サイドブレーキ    R1 / L1 : シフトアップ / ダウン（MT 時）
  *   △ / Y (buttons[3]) : 復帰      ○ / B (buttons[1]) : カメラ切替
  *   × / A (buttons[0]) : 決定（走り出す・会話を進める）
  *   OPTIONS / Menu (buttons[9]) : セットアップ画面
  *   十字キー左右 (14/15) : ステア（デジタル）
  */
 import type { DriveInput } from './keyboard'
-import { buttonDown, isWheelId, loadWheelSettings, readWheel, saveWheelSettings, type WheelButton, type WheelSettings } from './wheel'
+import { buttonDown, isWheelId, loadWheelSettings, observeAxes, readWheel, saveWheelSettings, type AxisObserved, type WheelButton, type WheelSettings } from './wheel'
 
 export type PadButton = 'confirm' | 'camera' | 'handbrake' | 'reset' | 'options' | 'share' | 'dpadUp' | 'dpadDown' | 'dpadLeft' | 'dpadRight' | 'l1' | 'r1'
 
@@ -47,6 +47,8 @@ export class GamepadInput {
   private lastId: string | null = null
   /** ハンコンの設定（localStorage に保存） */
   wheel: WheelSettings = loadWheelSettings()
+  /** 接続後に観測した軸のレンジ（ペダルの休止値推定用） */
+  observed: AxisObserved = { min: [], max: [] }
 
   /** ハンコンとして扱うか */
   isWheel(pad: Gamepad): boolean {
@@ -117,7 +119,9 @@ export class GamepadInput {
     if (pad.id !== this.lastId) {
       this.lastId = pad.id
       this.prev.clear()
+      this.observed = { min: [], max: [] }
     }
+    observeAxes(this.observed, pad.axes)
     for (const name of Object.keys(BUTTON_INDEX) as PadButton[]) {
       const idx = this.buttonIndex(pad, name)
       const down = idx >= 0 && buttonDown(pad, idx)
@@ -140,7 +144,9 @@ export class GamepadInput {
   read(): DriveInput | null {
     const pad = this.pad
     if (!pad) return null
-    if (this.isWheel(pad)) return readWheel(pad, this.wheel.mapping)
+    const shiftUp = this.consume('r1')
+    const shiftDown = this.consume('l1')
+    if (this.isWheel(pad)) return { ...readWheel(pad, this.wheel.mapping, this.observed), shiftUp, shiftDown }
     const axisX = applyDeadzone(pad.axes[0] ?? 0)
     const dpad = (this.isDown('dpadRight') ? 1 : 0) - (this.isDown('dpadLeft') ? 1 : 0)
     const trigger = (i: number) => {
@@ -152,7 +158,9 @@ export class GamepadInput {
       throttle: trigger(7),
       brake: trigger(6),
       steer: Math.max(-1, Math.min(1, axisX + dpad)),
-      handbrake: this.isDown('handbrake') || this.isDown('l1'),
+      handbrake: this.isDown('handbrake'),
+      shiftUp,
+      shiftDown,
     }
   }
 
@@ -175,5 +183,9 @@ export function mergeInputs(a: DriveInput, b: DriveInput | null): DriveInput {
     brake: Math.max(a.brake, b.brake),
     steer: Math.abs(b.steer) > Math.abs(a.steer) ? b.steer : a.steer,
     handbrake: a.handbrake || b.handbrake,
+    clutch: Math.max(a.clutch ?? 0, b.clutch ?? 0),
+    shiftUp: !!(a.shiftUp || b.shiftUp),
+    shiftDown: !!(a.shiftDown || b.shiftDown),
+    gearSelect: b.gearSelect ?? a.gearSelect ?? null,
   }
 }

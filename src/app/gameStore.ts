@@ -19,7 +19,8 @@ export interface GameState {
   status: 'loading' | 'ready' | 'error'
   errorMessage?: string
   speedKmh: number
-  gear: 'D' | 'R' | 'N'
+  /** 表示用ギア（R / N / 1..6） */
+  gear: string
   wheelsOnGround: number
   elapsed: number
   started: boolean
@@ -87,7 +88,7 @@ export const useGameStore = create<GameState>((set) => ({
   courseName: '',
   status: 'loading',
   speedKmh: 0,
-  gear: 'N',
+  gear: '1',
   wheelsOnGround: 0,
   elapsed: 0,
   started: false,

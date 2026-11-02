@@ -1,6 +1,5 @@
 /** アーケード風の計器: 速度の針メーター、回転計バー、ギア */
 import { useEffect, useRef } from 'react'
-import { audioEngine } from '../audio/AudioEngine'
 import { runtime } from './runtime'
 
 const MAX_KMH = 240
@@ -20,13 +19,13 @@ export function Speedometer() {
       const angle = -120 + t * 240
       if (needle.current) needle.current.setAttribute('transform', `rotate(${angle} 100 100)`)
       if (speedText.current) speedText.current.textContent = String(Math.round(shown))
-      const rpm = audioEngine.currentRpm
+      const rpm = runtime.rpm
       const r = Math.max(0, Math.min(1, (rpm - 800) / 6800))
       if (rpmBar.current) {
         rpmBar.current.setAttribute('width', String(Math.round(r * 150)))
         rpmBar.current.setAttribute('fill', r > 0.9 ? '#ff4d4d' : r > 0.75 ? '#ffb84d' : '#3ddcff')
       }
-      if (gearText.current) gearText.current.textContent = runtime.speedMs < -0.5 ? 'R' : Math.abs(runtime.speedMs) < 0.3 && runtime.throttle === 0 ? 'N' : String(audioEngine.currentGear)
+      if (gearText.current) gearText.current.textContent = runtime.gear
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)

@@ -18,6 +18,9 @@ import { ENGINE_WORKLET_SOURCE } from './engineWorklet'
 export interface EngineSoundInput {
   /** 0..1 */
   throttle: number
+  /** 駆動系の回転数・ギア（-1 R, 0 N, 1..）。渡されればサウンド側の自動変速を使わない */
+  rpm?: number
+  gear?: number
   /** 前進速度 [m/s]（絶対値） */
   speedMs: number
   /** 最高速 [m/s] */
@@ -253,6 +256,8 @@ export class AudioEngine {
   private gear = 0
   private shiftUntil = 0
   private shiftDirection = 0
+  /** 駆動系から渡された直近のギア */
+  private extGear = 1
   /** 回転数 [rpm]（慣性付きの状態） */
   private rpm = 900
   private lastUpdate = 0
@@ -662,32 +667,46 @@ export class AudioEngine {
     const v = input.speedMs
     const ratio = clamp01(v / Math.max(1, input.maxSpeedMs))
 
-    // ギア選択（ヒステリシス付き）
-    const low = this.gear === 0 ? 0 : GEAR_TOPS[this.gear - 1]
-    const top = GEAR_TOPS[this.gear]
-    const inGear = clamp01((ratio - low) / (top - low))
-    if (t > this.shiftUntil) {
-      if (inGear > 0.97 && this.gear < GEAR_TOPS.length - 1 && input.throttle > 0.1) {
-        this.gear++
-        this.shiftUntil = t + 0.18
-        this.shiftDirection = 1
-        if (v > 3) this.playSfx('shift')
-      } else if (inGear < 0.12 && this.gear > 0) {
-        this.gear--
-        this.shiftUntil = t + 0.12
-        this.shiftDirection = -1
-      }
-    }
-    const low2 = this.gear === 0 ? 0 : GEAR_TOPS[this.gear - 1]
-    const inGear2 = clamp01((ratio - low2) / (GEAR_TOPS[this.gear] - low2))
-    const shifting = t < this.shiftUntil
-
-    // 目標回転数: 停車中はスロットルで空ぶかし、走行中はギア内位置に比例
-    const moving = v > 0.8
+    let inGear2: number
     let target: number
-    if (!moving) target = IDLE + input.throttle * (REDLINE * 0.62 - IDLE)
-    else target = IDLE + (REDLINE - IDLE) * (0.18 + 0.82 * inGear2)
-    if (shifting && this.shiftDirection > 0) target *= 0.78
+    const moving = v > 0.8
+    if (input.rpm !== undefined && input.gear !== undefined) {
+      // 駆動系から回転数とギアをもらう
+      const g = Math.max(0, input.gear - 1)
+      if (input.gear !== this.extGear) {
+        this.shiftDirection = input.gear > this.extGear ? 1 : -1
+        this.shiftUntil = t + 0.16
+        if (v > 3 && input.gear > 0 && this.extGear > 0) this.playSfx('shift')
+        this.extGear = input.gear
+      }
+      this.gear = Math.min(GEAR_TOPS.length - 1, g)
+      inGear2 = clamp01((input.rpm - IDLE) / (REDLINE - IDLE))
+      target = input.rpm
+    } else {
+      // ギア選択（ヒステリシス付き）
+      const low = this.gear === 0 ? 0 : GEAR_TOPS[this.gear - 1]
+      const top = GEAR_TOPS[this.gear]
+      const inGear = clamp01((ratio - low) / (top - low))
+      if (t > this.shiftUntil) {
+        if (inGear > 0.97 && this.gear < GEAR_TOPS.length - 1 && input.throttle > 0.1) {
+          this.gear++
+          this.shiftUntil = t + 0.18
+          this.shiftDirection = 1
+          if (v > 3) this.playSfx('shift')
+        } else if (inGear < 0.12 && this.gear > 0) {
+          this.gear--
+          this.shiftUntil = t + 0.12
+          this.shiftDirection = -1
+        }
+      }
+      const low2 = this.gear === 0 ? 0 : GEAR_TOPS[this.gear - 1]
+      inGear2 = clamp01((ratio - low2) / (GEAR_TOPS[this.gear] - low2))
+      // 目標回転数: 停車中はスロットルで空ぶかし、走行中はギア内位置に比例
+      if (!moving) target = IDLE + input.throttle * (REDLINE * 0.62 - IDLE)
+      else target = IDLE + (REDLINE - IDLE) * (0.18 + 0.82 * inGear2)
+    }
+    const shifting = t < this.shiftUntil
+    if (shifting && this.shiftDirection > 0 && input.rpm === undefined) target *= 0.78
     // 慣性: 吹け上がりは速く、落ちはゆっくり。負荷が高いほど上がりが鈍い
     const rising = target > this.rpm
     const rate = rising ? (moving ? 2400 + input.throttle * 3200 : 5200) : 2600

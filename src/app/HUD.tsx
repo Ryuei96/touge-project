@@ -115,18 +115,18 @@ export function HUD() {
       <div className="hud-bottom-left panel small">
         {s.inputKind === 'wheel' ? (
           <>
-            <div>ハンドル ステア　右ペダル アクセル　中ペダル ブレーキ(停止後は後退)</div>
-            <div>ボタン割当（サイド・復帰・カメラ）はセットアップの「ハンコン」タブ</div>
+            <div>ハンドル ステア　右ペダル アクセル　中ペダル ブレーキ　左ペダル クラッチ</div>
+            <div>右パドル シフトアップ　左パドル シフトダウン（1→N→R）　割当は「ハンコン」タブ</div>
           </>
         ) : s.gamepadConnected ? (
           <>
-            <div>R2 アクセル　L2 ブレーキ(後退)　左スティック ステア</div>
-            <div>□ サイドブレーキ　△ 復帰　○ カメラ　× 決定　OPTIONS セットアップ</div>
+            <div>R2 アクセル　L2 ブレーキ(AT: 停止後は後退)　左スティック ステア</div>
+            <div>□ サイドブレーキ　△ 復帰　○ カメラ　R1/L1 シフト(MT)　OPTIONS セットアップ</div>
           </>
         ) : (
           <>
-            <div>W/S アクセル・ブレーキ(後退)　A/D ステア</div>
-            <div>Space サイドブレーキ　R 復帰　C カメラ切替</div>
+            <div>W/S アクセル・ブレーキ(AT: 停止後は後退)　A/D ステア</div>
+            <div>Space サイドブレーキ　R 復帰　C カメラ切替　E/Q シフト(MT)</div>
           </>
         )}
       </div>

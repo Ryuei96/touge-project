@@ -34,7 +34,7 @@ describe('GamepadInput', () => {
 
   it('merges keyboard and pad inputs', () => {
     const merged = mergeInputs({ throttle: 1, brake: 0, steer: -0.2, handbrake: false }, { throttle: 0.3, brake: 0.5, steer: 0.8, handbrake: true })
-    expect(merged).toEqual({ throttle: 1, brake: 0.5, steer: 0.8, handbrake: true })
+    expect(merged).toMatchObject({ throttle: 1, brake: 0.5, steer: 0.8, handbrake: true, shiftUp: false, shiftDown: false, clutch: 0, gearSelect: null })
     expect(mergeInputs({ throttle: 0, brake: 0, steer: 0, handbrake: false }, null).throttle).toBe(0)
   })
 })

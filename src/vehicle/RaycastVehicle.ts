@@ -7,6 +7,7 @@ import type { Pose } from '../course/types'
 import type { DriveInput } from '../input/keyboard'
 import { clamp, lerpN } from '../core/vec3'
 import { DEFAULT_VEHICLE_CONFIG, type VehicleConfig } from './vehicleConfig'
+import { Drivetrain, gearLabel } from './drivetrain'
 
 export interface WheelState {
   /** シャシーローカル座標 */
@@ -38,7 +39,10 @@ export class RaycastVehicle {
   private steer = 0
   private wheels: WheelState[] = []
   private disposed = false
-  gear: 'D' | 'R' | 'N' = 'N'
+  /** 表示用ギア（R / N / 1..6） */
+  gear = '1'
+  rpm = 900
+  readonly drivetrain = new Drivetrain()
 
   constructor(world: World, chassis: RigidBody, config: Partial<VehicleConfig> = {}) {
     this.config = { ...DEFAULT_VEHICLE_CONFIG, ...config }
@@ -98,26 +102,33 @@ export class RaycastVehicle {
     this.controller.setWheelSteering(WHEEL_FL, this.steer * STEER_SIGN)
     this.controller.setWheelSteering(WHEEL_FR, this.steer * STEER_SIGN)
 
+    // 駆動系（ギア・回転数・トルク係数）
+    const d = this.drivetrain.update({
+      throttle: input.throttle,
+      brake: input.brake,
+      clutch: input.clutch ?? 0,
+      shiftUp: !!input.shiftUp,
+      shiftDown: !!input.shiftDown,
+      gearSelect: input.gearSelect ?? null,
+      speedMs: speed,
+      maxSpeedMs: c.maxSpeed,
+      dt,
+    })
+    this.gear = gearLabel(d.gear)
+    this.rpm = d.rpm
+
     // 駆動・制動
     let engine = 0
     let brake = 0
-    const movingForward = speed > 0.5
-    const movingBackward = speed < -0.5
-    if (input.throttle > 0) {
-      engine = absSpeed < c.maxSpeed ? c.maxEngineForce * input.throttle : 0
-      this.gear = 'D'
+    if (d.gear > 0) {
+      if (input.throttle > 0) engine = absSpeed < c.maxSpeed ? c.maxEngineForce * input.throttle * d.driveFactor : 0
+    } else if (d.gear < 0) {
+      // AT は停車中のブレーキが後退アクセル、MT は R に入れてアクセル
+      const t = d.reverseByBrake ? input.brake : input.throttle
+      if (t > 0 && absSpeed < 12) engine = -c.reverseEngineForce * t * d.driveFactor
     }
-    if (input.brake > 0) {
-      if (movingForward) brake = c.brakeForce * input.brake
-      else if (!movingForward && input.throttle === 0) {
-        engine = -c.reverseEngineForce * input.brake
-        this.gear = 'R'
-      }
-    }
-    if (input.throttle === 0 && input.brake === 0) {
-      if (!movingForward && !movingBackward) this.gear = 'N'
-      brake = 2 // 軽いエンジンブレーキ
-    }
+    if (input.brake > 0 && !(d.gear < 0 && d.reverseByBrake)) brake = c.brakeForce * input.brake
+    if (input.throttle === 0 && input.brake === 0) brake = 2 // 軽いエンジンブレーキ
     this.controller.setWheelEngineForce(WHEEL_RL, engine * ENGINE_SIGN)
     this.controller.setWheelEngineForce(WHEEL_RR, engine * ENGINE_SIGN)
 
@@ -178,7 +189,8 @@ export class RaycastVehicle {
       this.controller.setWheelBrake(i, 0)
       this.controller.setWheelSteering(i, 0)
     }
-    this.gear = 'N'
+    this.drivetrain.reset(1)
+    this.gear = '1'
   }
 
   dispose(): void {
