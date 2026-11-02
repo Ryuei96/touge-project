@@ -15,7 +15,8 @@ export function GamepadBridge() {
       gamepad.poll()
       const s = useGameStore.getState()
       const connected = gamepad.connected
-      if (connected !== s.gamepadConnected) s.patch({ gamepadConnected: connected, gamepadId: gamepad.id ?? undefined })
+      const kind = gamepad.kind
+      if (connected !== s.gamepadConnected || kind !== s.inputKind) s.patch({ gamepadConnected: connected, gamepadId: gamepad.id ?? undefined, inputKind: kind })
       if (connected) {
         if (gamepad.consume('confirm')) {
           if (s.intro) document.querySelector<HTMLButtonElement>('.conversation-actions .mini')?.click()

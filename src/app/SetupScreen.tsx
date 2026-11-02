@@ -6,11 +6,12 @@ import { audioEngine } from '../audio/AudioEngine'
 import { courseManager } from '../course'
 import { CharacterPanel } from './CharacterPanel'
 import { GaragePanel } from './GaragePanel'
+import { WheelPanel } from './WheelPanel'
 import { useGameStore, type TimeOfDay } from './gameStore'
 import { useGarageStore } from './garageStore'
 import { runtime } from './runtime'
 
-type Tab = 'race' | 'garage' | 'characters'
+type Tab = 'race' | 'garage' | 'characters' | 'wheel'
 
 export function SetupScreen() {
   const s = useGameStore()
@@ -40,6 +41,7 @@ export function SetupScreen() {
               ['race', 'レース'],
               ['garage', 'ガレージ'],
               ['characters', 'キャラクター'],
+              ['wheel', s.inputKind === 'wheel' ? 'ハンコン ●' : 'ハンコン'],
             ] as [Tab, string][]
           ).map(([id, label]) => (
             <button key={id} className={`tab ${tab === id ? 'active' : ''}`} onClick={() => setTab(id)}>
@@ -104,12 +106,13 @@ export function SetupScreen() {
         )}
         {tab === 'garage' && <GaragePanel />}
         {tab === 'characters' && <CharacterPanel />}
+        {tab === 'wheel' && <WheelPanel />}
         <div className="row setup-actions">
           <button className="primary" onClick={start} disabled={s.status !== 'ready'}>
             走り出す
           </button>
           <span className="small">
-            {s.gamepadConnected ? '🎮 R2 アクセル　L2 ブレーキ　左スティック ステア　□ サイド　△ 復帰　○ カメラ　× 決定' : 'W/S アクセル・ブレーキ　A/D ステア　Space サイド　R 復帰　C カメラ　M ミュート'}
+            {s.inputKind === 'wheel' ? '🏎 ハンドル + ペダルで走行。ボタン割当は「ハンコン」タブで校正' : s.gamepadConnected ? '🎮 R2 アクセル　L2 ブレーキ　左スティック ステア　□ サイド　△ 復帰　○ カメラ　× 決定' : 'W/S アクセル・ブレーキ　A/D ステア　Space サイド　R 復帰　C カメラ　M ミュート'}
           </span>
         </div>
       </div>

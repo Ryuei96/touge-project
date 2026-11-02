@@ -66,6 +66,8 @@ export interface GameState {
   postEffects: boolean
   gamepadConnected: boolean
   gamepadId?: string
+  /** 接続中の機器の種類（pad = ゲームパッド、wheel = ハンコン） */
+  inputKind: 'pad' | 'wheel' | null
 
   setCourse(id: string): void
   setStatus(status: GameState['status'], message?: string): void
@@ -119,6 +121,7 @@ export const useGameStore = create<GameState>((set) => ({
   bgmStyle: (initialQuery?.get('bgm') as BgmStyle | null) ?? 'goldrunner',
   postEffects: initialQuery?.get('fx') !== '0',
   gamepadConnected: false,
+  inputKind: null,
 
   setCourse: (id) => set({ courseId: id, status: 'loading', elapsed: 0, started: false, finished: false, finishTime: null, checkpointIndex: 0, progress: 0, resets: 0, lap: 1, rank: 1, rivalFinished: false, dialogue: null, outroShown: false, countdown: null, splits: [], lastSplit: null, result: null }),
   setStatus: (status, message) => set({ status, errorMessage: message }),

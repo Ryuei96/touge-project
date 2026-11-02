@@ -1,5 +1,6 @@
 /**
  * ゲームパッド入力（Gamepad API、標準マッピング）。PS5 DualSense / Xbox 両対応。
+ * ハンドルコントローラー（G923 等）は wheel.ts のマッピングで読む（isWheel で判定）。
  *
  *   左スティック X : ステア        R2 (buttons[7]) : アクセル（アナログ）
  *   L2 (buttons[6]) : ブレーキ     □ / X (buttons[2]) : サイドブレーキ
@@ -9,6 +10,7 @@
  *   十字キー左右 (14/15) : ステア（デジタル）
  */
 import type { DriveInput } from './keyboard'
+import { buttonDown, isWheelId, loadWheelSettings, readWheel, saveWheelSettings, type WheelButton, type WheelSettings } from './wheel'
 
 export type PadButton = 'confirm' | 'camera' | 'handbrake' | 'reset' | 'options' | 'share' | 'dpadUp' | 'dpadDown' | 'dpadLeft' | 'dpadRight' | 'l1' | 'r1'
 
@@ -37,22 +39,63 @@ function applyDeadzone(v: number): number {
   return Math.sign(v) * Math.pow(n, 1.4)
 }
 
+export type InputKind = 'pad' | 'wheel'
+
 export class GamepadInput {
   private prev = new Map<PadButton, boolean>()
   private pressed = new Set<PadButton>()
   private lastId: string | null = null
+  /** ハンコンの設定（localStorage に保存） */
+  wheel: WheelSettings = loadWheelSettings()
 
-  /** 接続中のパッド（標準マッピング優先） */
+  /** ハンコンとして扱うか */
+  isWheel(pad: Gamepad): boolean {
+    return this.wheel.forceWheel ? pad.mapping !== 'standard' : pad.mapping !== 'standard' && isWheelId(pad.id)
+  }
+
+  /** 接続中の機器。ハンコン > 標準マッピングのパッド > その他 */
   get pad(): Gamepad | null {
     if (typeof navigator === 'undefined' || !navigator.getGamepads) return null
     const pads = navigator.getGamepads()
-    let best: Gamepad | null = null
+    let standard: Gamepad | null = null
+    let other: Gamepad | null = null
     for (const p of pads) {
       if (!p || !p.connected) continue
-      if (p.mapping === 'standard') return p
-      best ??= p
+      if (this.isWheel(p)) return p
+      if (p.mapping === 'standard') standard ??= p
+      else other ??= p
     }
-    return best
+    return standard ?? other
+  }
+
+  get kind(): InputKind | null {
+    const pad = this.pad
+    if (!pad) return null
+    return this.isWheel(pad) ? 'wheel' : 'pad'
+  }
+
+  updateWheel(settings: WheelSettings): void {
+    this.wheel = settings
+    saveWheelSettings(settings)
+    this.prev.clear()
+    this.pressed.clear()
+  }
+
+  /** 校正 UI 用: 生の軸とボタンの値 */
+  rawSnapshot(): { id: string; mapping: string; axes: number[]; buttons: boolean[] } | null {
+    const pad = this.pad
+    if (!pad) return null
+    return { id: pad.id, mapping: pad.mapping, axes: Array.from(pad.axes), buttons: pad.buttons.map((b) => b.pressed || b.value > 0.5) }
+  }
+
+  private buttonIndex(pad: Gamepad, name: PadButton): number {
+    if (this.isWheel(pad)) {
+      const b = this.wheel.mapping.buttons
+      const map: Partial<Record<PadButton, WheelButton>> = { confirm: 'confirm', camera: 'camera', handbrake: 'handbrake', reset: 'reset', options: 'options', r1: 'shiftUp', l1: 'shiftDown' }
+      const w = map[name]
+      return w ? b[w] : -1
+    }
+    return BUTTON_INDEX[name]
   }
 
   get connected(): boolean {
@@ -75,8 +118,9 @@ export class GamepadInput {
       this.lastId = pad.id
       this.prev.clear()
     }
-    for (const [name, idx] of Object.entries(BUTTON_INDEX) as [PadButton, number][]) {
-      const down = (pad.buttons[idx]?.pressed ?? false) || (pad.buttons[idx]?.value ?? 0) > 0.5
+    for (const name of Object.keys(BUTTON_INDEX) as PadButton[]) {
+      const idx = this.buttonIndex(pad, name)
+      const down = idx >= 0 && buttonDown(pad, idx)
       if (down && !this.prev.get(name)) this.pressed.add(name)
       this.prev.set(name, down)
     }
@@ -96,6 +140,7 @@ export class GamepadInput {
   read(): DriveInput | null {
     const pad = this.pad
     if (!pad) return null
+    if (this.isWheel(pad)) return readWheel(pad, this.wheel.mapping)
     const axisX = applyDeadzone(pad.axes[0] ?? 0)
     const dpad = (this.isDown('dpadRight') ? 1 : 0) - (this.isDown('dpadLeft') ? 1 : 0)
     const trigger = (i: number) => {

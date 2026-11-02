@@ -54,7 +54,7 @@ export function HUD() {
           カメラ: {CAMERA_LABELS[s.cameraMode]} (C) ・ 復帰 {s.resets} 回 (R)
           {s.gamepadConnected && (
             <span className="pad-badge" title={s.gamepadId}>
-              🎮 パッド接続中
+              {s.inputKind === 'wheel' ? '🏎 ハンコン接続中' : '🎮 パッド接続中'}
             </span>
           )}
         </div>
@@ -113,7 +113,12 @@ export function HUD() {
       )}
 
       <div className="hud-bottom-left panel small">
-        {s.gamepadConnected ? (
+        {s.inputKind === 'wheel' ? (
+          <>
+            <div>ハンドル ステア　右ペダル アクセル　中ペダル ブレーキ(停止後は後退)</div>
+            <div>ボタン割当（サイド・復帰・カメラ）はセットアップの「ハンコン」タブ</div>
+          </>
+        ) : s.gamepadConnected ? (
           <>
             <div>R2 アクセル　L2 ブレーキ(後退)　左スティック ステア</div>
             <div>□ サイドブレーキ　△ 復帰　○ カメラ　× 決定　OPTIONS セットアップ</div>
